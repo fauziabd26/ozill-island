@@ -89,18 +89,18 @@ public struct CollapsedPrayerPill: View {
         .overlay(
             Capsule(style: .continuous)
                 .stroke(
-                    isHovered ? palette.hoverBorder : palette.border,
+                    isHovered ? accent.opacity(0.85) : palette.border,
                     lineWidth: isHovered ? 1.4 : 1.0
                 )
         )
         .clipShape(Capsule(style: .continuous))
         .contentShape(Capsule(style: .continuous))
-        .scaleEffect(isHovered && !reduceMotion ? 1.03 : 1.0)
+        .scaleEffect(isHovered && !reduceMotion ? 1.02 : 1.0)
         .shadow(
-            color: isHovered ? accent.opacity(0.35) : palette.shadowColor,
-            radius: isHovered ? 14 : 8,
+            color: isHovered ? accent.opacity(0.3) : Color.clear,
+            radius: isHovered ? 4 : 0,
             x: 0,
-            y: isHovered ? 6 : 4
+            y: isHovered ? 1 : 0
         )
         .onHover { hovering in
             withAnimation(.spring(response: 0.32, dampingFraction: 0.72)) {
