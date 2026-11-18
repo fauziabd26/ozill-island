@@ -35,11 +35,12 @@ public struct ExpandedPrayerSheet: View {
                         vm.openSettings()
                     }) {
                         Image(systemName: "gearshape.fill")
-                            .font(.system(size: 12))
-                            .foregroundColor(.white.opacity(0.8))
-                            .padding(5)
-                            .background(Color.white.opacity(0.1))
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(.white.opacity(0.85))
+                            .frame(width: 32, height: 32)
+                            .background(Color.white.opacity(0.12))
                             .clipShape(Circle())
+                            .contentShape(Circle())
                     }
                     .buttonStyle(PlainButtonStyle())
                     .help("Pengaturan & Koreksi Waktu")
@@ -48,11 +49,12 @@ public struct ExpandedPrayerSheet: View {
                         vm.collapse()
                     }) {
                         Image(systemName: "chevron.up")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundColor(.white.opacity(0.8))
-                            .padding(5)
-                            .background(Color.white.opacity(0.1))
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.white.opacity(0.85))
+                            .frame(width: 32, height: 32)
+                            .background(Color.white.opacity(0.12))
                             .clipShape(Circle())
+                            .contentShape(Circle())
                     }
                     .buttonStyle(PlainButtonStyle())
                     .help("Tutup Island")

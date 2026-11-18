@@ -37,6 +37,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         toggleItem.target = self
         menu.addItem(toggleItem)
         
+        let settingsItem = NSMenuItem(title: "Pengaturan Ozill Island...", action: #selector(openSettingsAction), keyEquivalent: ",")
+        settingsItem.target = self
+        menu.addItem(settingsItem)
+        
         let refreshLocItem = NSMenuItem(title: "Perbarui Lokasi GPS", action: #selector(refreshLocation), keyEquivalent: "r")
         refreshLocItem.target = self
         menu.addItem(refreshLocItem)
@@ -51,6 +55,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     
     @objc private func toggleIsland() {
         IslandWindowController.shared.setupAndShow()
+    }
+    
+    @objc private func openSettingsAction() {
+        IslandWindowController.shared.openSettings()
     }
     
     @objc private func refreshLocation() {

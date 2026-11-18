@@ -1,6 +1,14 @@
 import AppKit
 import SwiftUI
 
+/// Custom NSHostingView yang meng-override acceptsFirstMouse agar interaksi klik pertama
+/// pada floating panel langsung direspons tanpa tertelan saat aplikasi berada dalam status inactive.
+public final class IslandHostingView<Content: View>: NSHostingView<Content> {
+    public override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        return true
+    }
+}
+
 public final class IslandPanel: NSPanel {
     public init(contentRect: NSRect) {
         super.init(

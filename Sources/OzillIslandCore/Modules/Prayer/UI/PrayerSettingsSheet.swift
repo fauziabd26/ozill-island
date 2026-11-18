@@ -22,7 +22,12 @@ public struct PrayerSettingsSheet: View {
                         Text("Kembali")
                             .font(.system(size: 12, weight: .medium))
                     }
-                    .foregroundColor(.white.opacity(0.8))
+                    .foregroundColor(.white.opacity(0.85))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(Color.white.opacity(0.1))
+                    .cornerRadius(6)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(PlainButtonStyle())
                 

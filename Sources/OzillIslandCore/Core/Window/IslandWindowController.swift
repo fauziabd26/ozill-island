@@ -1,11 +1,12 @@
 import AppKit
 import SwiftUI
 
+@MainActor
 public final class IslandWindowController: NSObject {
     public static let shared = IslandWindowController()
     
     private var panel: IslandPanel?
-    private var hostingView: NSHostingView<IslandPillView>?
+    private var hostingView: IslandHostingView<IslandPillView>?
     
     public override init() {
         super.init()
@@ -22,8 +23,8 @@ public final class IslandWindowController: NSObject {
         let rect = calculateFrame(width: initialWidth, height: initialHeight)
         
         let newPanel = IslandPanel(contentRect: rect)
-        let rootView = IslandPillView()
-        let hosting = NSHostingView(rootView: rootView)
+        let rootView = IslandPillView(vm: PrayerIslandViewModel.shared)
+        let hosting = IslandHostingView(rootView: rootView)
         hosting.frame = NSRect(x: 0, y: 0, width: initialWidth, height: initialHeight)
         
         newPanel.contentView = hosting
@@ -43,6 +44,24 @@ public final class IslandWindowController: NSObject {
         )
     }
     
+    /// Membuka langsung halaman Settings di floating island
+    public func openSettings() {
+        setupAndShow()
+        panel?.makeKeyAndOrderFront(nil)
+        PrayerIslandViewModel.shared.openSettings()
+    }
+    
+    /// Toggle antara collapsed dan expanded
+    public func toggleExpand() {
+        setupAndShow()
+        PrayerIslandViewModel.shared.toggleExpand()
+    }
+    
+    /// Menutup panel kembali ke pill collapsed
+    public func collapse() {
+        PrayerIslandViewModel.shared.collapse()
+    }
+    
     public func updateFrame(for state: IslandState, animated: Bool = true) {
         guard let panel = panel else { return }
         
@@ -55,10 +74,10 @@ public final class IslandWindowController: NSObject {
             height = 46
         case .expanded:
             width = 390
-            height = 320
+            height = 375
         case .settings:
             width = 390
-            height = 370
+            height = 410
         }
         
         let targetFrame = calculateFrame(width: width, height: height)

@@ -10,6 +10,8 @@ public enum IslandState {
 
 @MainActor
 public final class PrayerIslandViewModel: ObservableObject {
+    public static let shared = PrayerIslandViewModel()
+    
     @Published public var state: IslandState = .collapsed {
         didSet {
             IslandWindowController.shared.updateFrame(for: state, animated: true)

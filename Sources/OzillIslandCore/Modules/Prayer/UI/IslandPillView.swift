@@ -1,9 +1,16 @@
 import SwiftUI
 
+@MainActor
 public struct IslandPillView: View {
-    @StateObject private var vm = PrayerIslandViewModel()
+    @ObservedObject private var vm: PrayerIslandViewModel
     
-    public init() {}
+    public init(vm: PrayerIslandViewModel) {
+        self.vm = vm
+    }
+    
+    public init() {
+        self.vm = PrayerIslandViewModel.shared
+    }
     
     public var body: some View {
         Group {
