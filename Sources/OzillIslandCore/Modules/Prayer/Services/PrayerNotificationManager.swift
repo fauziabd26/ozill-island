@@ -1,8 +1,24 @@
 import Foundation
 import UserNotifications
 
+public extension TimeZone {
+    /// Memberikan singkatan zona waktu yang deterministik untuk wilayah Indonesia
+    var indonesianAbbreviation: String {
+        switch identifier {
+        case "Asia/Jakarta", "Asia/Pontianak":
+            return "WIB"
+        case "Asia/Makassar", "Asia/Ujung_Pandang", "Asia/Denpasar":
+            return "WITA"
+        case "Asia/Jayapura":
+            return "WIT"
+        default:
+            return abbreviation() ?? identifier
+        }
+    }
+}
+
 /// Mengelola antrean notifikasi lokal macOS untuk pengingat dan waktu masuk shalat.
-/// Menggunakan aktor atau serialisasi berbasis revision token untuk mencegah race condition antar Task yang berjalan paralel.
+/// Menggunakan aktor Swift dengan pembatalan Task dan revision token serial untuk mencegah race condition antar Task yang berjalan paralel.
 public actor PrayerNotificationManager {
     public static let shared = PrayerNotificationManager()
     private let center = UNUserNotificationCenter.current()
@@ -22,7 +38,7 @@ public actor PrayerNotificationManager {
     }
     
     /// Menjadwalkan reminder dan notifikasi masuk waktu untuk jadwal hari ini + Subuh hari esok.
-    /// Dilindungi dengan revision token agar eksekusi yang lebih baru tidak tertimpa oleh eksekusi yang lebih lama.
+    /// Dilindungi dengan revision token dan Task cancellation check di setiap suspension point.
     public func scheduleAll(
         todaySchedule: PrayerSchedule,
         tomorrowSchedule: PrayerSchedule?,
@@ -32,12 +48,14 @@ public actor PrayerNotificationManager {
         currentSchedulingRevision &+= 1
         let thisRevision = currentSchedulingRevision
         
+        guard !Task.isCancelled else { return }
+        
         let now = Date()
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "id_ID")
         formatter.timeZone = timeZone
         formatter.dateFormat = "HH:mm"
-        let tzAbbr = timeZone.abbreviation(for: now) ?? "WIB"
+        let tzAbbr = timeZone.indonesianAbbreviation
         
         var pendingRequests: [UNNotificationRequest] = []
         
@@ -141,15 +159,17 @@ public actor PrayerNotificationManager {
             }
         }
         
-        // Cek kembali revision token: Jika ada penjadwalan lebih baru yang masuk selama proses, batalkan hasil lama
-        guard thisRevision == self.currentSchedulingRevision else {
+        // Cek revision token & cancellation sebelum memodifikasi notification center
+        guard !Task.isCancelled && thisRevision == self.currentSchedulingRevision else {
             return
         }
         
-        // Hapus pending lama dan tambahkan antrean baru yang sudah disiapkan
+        // Hapus pending lama
         center.removeAllPendingNotificationRequests()
+        
+        // Daftarkan notifikasi baru dengan verifikasi revision di setiap iterasi
         for req in pendingRequests {
-            guard thisRevision == self.currentSchedulingRevision else { return }
+            guard !Task.isCancelled && thisRevision == self.currentSchedulingRevision else { return }
             try? await center.add(req)
         }
     }

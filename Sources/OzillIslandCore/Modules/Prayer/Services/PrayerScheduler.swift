@@ -35,6 +35,7 @@ public final class PrayerScheduler: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var triggeredPrayerKeys = Set<String>()
     private var lastActiveTime: Date = Date()
+    private var recordedSleepTime: Date?
     private var isInitialLaunch: Bool = true
     private var observerTokens: [NSObjectProtocol] = []
     private var notificationTask: Task<Void, Never>?
@@ -83,7 +84,19 @@ public final class PrayerScheduler: ObservableObject {
     }
     
     private func setupSystemNotifications() {
-        // Observer 1: Tangani saat Mac bangun dari sleep
+        // Observer 1: Tangkap timestamp tepat sebelum Mac tidur (menghindari race condition dengan timer tick saat bangun)
+        let willSleepToken = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.willSleepNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.recordedSleepTime = Date()
+            }
+        }
+        observerTokens.append(willSleepToken)
+        
+        // Observer 2: Tangani saat Mac bangun dari sleep
         let wakeToken = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification,
             object: nil,
@@ -95,7 +108,7 @@ public final class PrayerScheduler: ObservableObject {
         }
         observerTokens.append(wakeToken)
         
-        // Observer 2: Tangani pergantian hari kalender sistem
+        // Observer 3: Tangani pergantian hari kalender sistem
         let dayChangedToken = NotificationCenter.default.addObserver(
             forName: .NSCalendarDayChanged,
             object: nil,
@@ -113,7 +126,7 @@ public final class PrayerScheduler: ObservableObject {
         }
         observerTokens.append(dayChangedToken)
         
-        // Observer 3: Tangani jam sistem diubah secara manual atau sinkronisasi NTP
+        // Observer 4: Tangani jam sistem diubah secara manual atau sinkronisasi NTP
         let clockChangeToken = NotificationCenter.default.addObserver(
             forName: .NSSystemClockDidChange,
             object: nil,
@@ -133,13 +146,16 @@ public final class PrayerScheduler: ObservableObject {
     }
     
     /// Menangani peristiwa saat Mac bangun dari sleep:
+    /// - Menggunakan recordedSleepTime (dari willSleepNotification) untuk keandalan anti-race-condition dengan timer tick.
     /// - Mengaudit rentang sleep bahkan jika melintasi tengah malam.
     /// - Mencegah pemutaran audio adzan secara retroaktif untuk shalat yang telah lewat.
     /// - Mencegah false banner saat aplikasi baru pertama kali dijalankan.
     /// - Menerapkan kebijakan sopan jika Mac tidur lebih dari 24 jam.
     public func handleWakeFromSleep() {
         let now = Date()
-        let sleepStartTime = lastActiveTime
+        // Prioritaskan timestamp presisi yang ditangkap sebelum sleep
+        let sleepStartTime = recordedSleepTime ?? lastActiveTime
+        recordedSleepTime = nil
         lastActiveTime = now
         
         // Abaikan jika initial launch atau jam sistem mundur
@@ -227,7 +243,7 @@ public final class PrayerScheduler: ObservableObject {
             let formatter = DateFormatter()
             formatter.dateFormat = "HH:mm"
             formatter.timeZone = tz
-            let tzAbbr = tz.abbreviation(for: now) ?? ""
+            let tzAbbr = tz.indonesianAbbreviation
             
             let parts = missedOccurrences.map { occ in
                 "\(occ.prayer.rawValue) (\(formatter.string(from: occ.time)))"
