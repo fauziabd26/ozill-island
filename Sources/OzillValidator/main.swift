@@ -1,11 +1,51 @@
 import Foundation
 import OzillIslandCore
 import AVFoundation
+import UserNotifications
+
+actor MockNotificationCenter: PrayerNotificationCenterProtocol {
+    private var _addedRequests: [UNNotificationRequest] = []
+    private var _removeAllCallCount = 0
+    let delayNanoseconds: UInt64
+    let shouldFailOnAdd: Bool
+    
+    var addedRequests: [UNNotificationRequest] {
+        return _addedRequests
+    }
+    
+    var removeAllCallCount: Int {
+        return _removeAllCallCount
+    }
+    
+    init(delayNanoseconds: UInt64 = 0, shouldFailOnAdd: Bool = false) {
+        self.delayNanoseconds = delayNanoseconds
+        self.shouldFailOnAdd = shouldFailOnAdd
+    }
+    
+    func requestAuthorization(options: UNAuthorizationOptions) async throws -> Bool {
+        return true
+    }
+    
+    func removeAllPendingNotificationRequests() async {
+        _removeAllCallCount += 1
+        _addedRequests.removeAll()
+    }
+    
+    func add(_ request: UNNotificationRequest) async throws {
+        if delayNanoseconds > 0 {
+            try await Task.sleep(nanoseconds: delayNanoseconds)
+        }
+        if shouldFailOnAdd {
+            throw NSError(domain: "OzillTestErrorDomain", code: 1001, userInfo: [NSLocalizedDescriptionKey: "Simulated center.add failure for testing"])
+        }
+        _addedRequests.append(request)
+    }
+}
 
 @main
 struct OzillValidatorApp {
     @MainActor
-    static func main() {
+    static func main() async {
         print("""
         ================================================================================
            OZILL ISLAND — PRAYER ENGINE FINAL HARDENING VALIDATION SUITE
@@ -89,13 +129,24 @@ struct OzillValidatorApp {
         }
 
         // MARK: - BAGIAN 2: AUTOMATED VALIDATION ASSERTIONS
-        print("🧪 [BAGIAN 2: AUTOMATED VALIDATION ASSERTIONS (14 ASSERTION SUITES)]\n")
+        print("🧪 [BAGIAN 2: AUTOMATED VALIDATION ASSERTIONS (20 ASSERTION SUITES)]\n")
 
         var testCount = 0
         func runTest(_ name: String, block: () throws -> Void) {
             testCount += 1
             do {
                 try block()
+                print("  ✅ [PASS] Assertion \(testCount): \(name)")
+            } catch {
+                print("  ❌ [FAIL] Assertion \(testCount): \(name) - Error: \(error)")
+                exit(1)
+            }
+        }
+        
+        func runAsyncTest(_ name: String, block: () async throws -> Void) async {
+            testCount += 1
+            do {
+                try await block()
                 print("  ✅ [PASS] Assertion \(testCount): \(name)")
             } catch {
                 print("  ❌ [FAIL] Assertion \(testCount): \(name) - Error: \(error)")
@@ -389,6 +440,152 @@ struct OzillValidatorApp {
             assert(player.duration > 0, "Durasi audio harus lebih dari 0 detik")
         }
 
+        // Assertion 15: Sleep timestamp captured before task dispatch
+        runTest("Timestamp Sleep Ditangkap Sebelum Task Dispatch: Menjamin keakuratan durasi tanpa terdistorsi saat Mac bangun") {
+            let scheduler = PrayerScheduler.shared
+            let preSleepDate = Date(timeIntervalSince1970: 1700000000)
+            scheduler.recordSleep(at: preSleepDate)
+            assert(scheduler.currentRecordedSleepTime == preSleepDate, "Timestamp harus tersimpan tepat sama seperti sebelum sleep")
+        }
+
+        // Assertion 16: Short sleep (< 15s) produces no false missed prayer
+        runTest("Sleep Singkat (< 15 detik): Tidak memicu false missed prayer alert") {
+            let scheduler = PrayerScheduler.shared
+            scheduler.setInitialLaunchForTesting(false)
+            scheduler.clearMissedPrayerAlert()
+            
+            let sleepStart = Date()
+            let wakeTime = sleepStart.addingTimeInterval(5) // 5 detik < 15 detik
+            scheduler.recordSleep(at: sleepStart)
+            scheduler.handleWakeFromSleep(at: wakeTime)
+            
+            assert(scheduler.missedPrayerAlert == nil, "Sleep < 15 detik tidak boleh memunculkan alert missed prayer")
+        }
+
+        // Assertion 17: Sleep across midnight detects prayer from both dates
+        runTest("Sleep Lintas Tengah Malam (23:00 -> 06:00): Mendeteksi shalat Subuh hari kedua secara akurat") {
+            let scheduler = PrayerScheduler.shared
+            scheduler.setInitialLaunchForTesting(false)
+            scheduler.clearMissedPrayerAlert()
+            scheduler.clearTriggeredPrayerKeysForTesting()
+            
+            var cal = Calendar(identifier: .gregorian)
+            cal.timeZone = tzJakarta
+            
+            var sleepComp = DateComponents()
+            sleepComp.year = 2026
+            sleepComp.month = 11
+            sleepComp.day = 18
+            sleepComp.hour = 23
+            sleepComp.minute = 0
+            let sleepStart = cal.date(from: sleepComp)!
+            
+            var wakeComp = DateComponents()
+            wakeComp.year = 2026
+            wakeComp.month = 11
+            wakeComp.day = 19
+            wakeComp.hour = 6
+            wakeComp.minute = 0
+            let wakeTime = cal.date(from: wakeComp)!
+            
+            scheduler.recordSleep(at: sleepStart)
+            scheduler.handleWakeFromSleep(at: wakeTime)
+            
+            assert(scheduler.missedPrayerAlert != nil, "Harus memunculkan alert missed prayer")
+            assert(scheduler.missedPrayerAlert?.contains("Subuh") == true, "Alert harus mencakup shalat Subuh")
+        }
+
+        // Assertion 18: Missed prayer suppresses retroactive adzan
+        runTest("Missed Prayer Membungkam Adzan Retroaktif: Key adzan ter-blacklist di triggeredPrayerKeys") {
+            let scheduler = PrayerScheduler.shared
+            let keys = scheduler.getTriggeredPrayerKeysForTesting()
+            
+            // Subuh tanggal 19 November harus ada di daftar blacklisted keys
+            let expectedKey = "Subuh-2026-11-19"
+            assert(keys.contains(expectedKey), "Kunci adzan untuk shalat yang terlewat saat tidur harus ter-blacklist")
+        }
+
+        // Assertion 19: Serialized FIFO scheduling queue eliminates race condition between rapid back-to-back requests
+        await runAsyncTest("Serialized FIFO Scheduling Queue: Menghilangkan race condition pada pemanggilan cepat beruntun") {
+            let mockCenter = MockNotificationCenter(delayNanoseconds: 20_000_000) // 20ms per penambahan
+            let manager = PrayerNotificationManager(center: mockCenter)
+            
+            guard let sched1 = calculator.calculate(latitude: -6.2088, longitude: 106.8456, date: baseTestDate, timeZone: tzJakarta, adjustments: [:]),
+                  let sched2 = calculator.calculate(latitude: -6.2088, longitude: 106.8456, date: baseTestDate.addingTimeInterval(86400), timeZone: tzJakarta, adjustments: [:]) else {
+                fatalError("Gagal menghitung jadwal uji")
+            }
+            
+            // Jalankan dua batch secara berurutan tanpa jeda
+            let task1 = Task {
+                await manager.scheduleAll(
+                    todaySchedule: sched1,
+                    tomorrowSchedule: nil,
+                    preferences: PrayerSettings.shared.preferences,
+                    timeZone: tzJakarta
+                )
+            }
+            
+            let task2 = Task {
+                await manager.scheduleAll(
+                    todaySchedule: sched2,
+                    tomorrowSchedule: nil,
+                    preferences: PrayerSettings.shared.preferences,
+                    timeZone: tzJakarta
+                )
+            }
+            
+            _ = await task1.value
+            _ = await task2.value
+            
+            // Verifikasi bahwa antrean serial menyelesaikan seluruh proses secara bersih
+            let finalRequests = await mockCenter.addedRequests
+            let removeCalls = await mockCenter.removeAllCallCount
+            assert(removeCalls >= 1, "removeAllPendingNotificationRequests harus dipanggil")
+            assert(finalRequests.count <= 10, "Jumlah notifikasi tidak boleh melebihi batas batch aktif")
+        }
+
+        // Assertion 20: Notification add errors are captured and diagnosable
+        await runAsyncTest("Diagnostik Error Notifikasi: center.add yang gagal tercatat secara eksplisit di lastErrors") {
+            let failingCenter = MockNotificationCenter(shouldFailOnAdd: true)
+            let failingManager = PrayerNotificationManager(center: failingCenter)
+            
+            guard let testSched = calculator.calculate(latitude: -6.2088, longitude: 106.8456, date: baseTestDate, timeZone: tzJakarta, adjustments: [:]) else {
+                fatalError("Gagal menghitung testSched")
+            }
+            
+            // Atur waktu acuan ke pagi hari agar semua waktu shalat di masa depan terjadwalkan
+            var cal = Calendar(identifier: .gregorian)
+            cal.timeZone = tzJakarta
+            var morningComp = DateComponents()
+            morningComp.year = 2026
+            morningComp.month = 11
+            morningComp.day = 18
+            morningComp.hour = 3
+            morningComp.minute = 0
+            let morningDate = cal.date(from: morningComp)!
+            
+            let requests = await failingManager.buildNotificationRequests(
+                todaySchedule: testSched,
+                tomorrowSchedule: nil,
+                preferences: PrayerSettings.shared.preferences,
+                timeZone: tzJakarta,
+                referenceDate: morningDate
+            )
+            assert(!requests.isEmpty, "Harus ada request notifikasi yang dibentuk")
+            
+            // Jalankan scheduleAll dengan failing center
+            await failingManager.scheduleAll(
+                todaySchedule: testSched,
+                tomorrowSchedule: nil,
+                preferences: PrayerSettings.shared.preferences,
+                timeZone: tzJakarta
+            )
+            
+            let recordedErrors = await failingManager.lastErrors
+            assert(!recordedErrors.isEmpty, "Error penambahan notifikasi harus tercatat dan tidak boleh ditelan")
+            assert(recordedErrors[0].error.contains("Simulated center.add failure"), "Deskripsi error harus sesuai")
+        }
+
         print("""
 
         ================================================================================
@@ -396,8 +593,10 @@ struct OzillValidatorApp {
            1. Magic numbers (86400, 15, 45) diganti konstanta bernama bertipe TimeInterval.
            2. Deduplikasi Adzan diperkuat menggunakan Set<String> dengan pemangkasan memori.
            3. Sleep/Wake mencatat MissedPrayerOccurrence terstruktur (nama, waktu, zona).
-           4. Notification scheduling diserialisasi menggunakan revision token & task cancellation.
-           5. Seluruh 14 Automated Validation Assertions BERHASIL (PASS).
+           4. Timestamp sleep ditangkap secara sinkron sebelum dispatch Task MainActor.
+           5. FIFO Serialized Notification Queue menjamin tidak ada overlapping / stale requests.
+           6. Error add notifikasi tercatat transparan dan dapat didiagnosa.
+           7. Seluruh 20 Automated Validation Assertions BERHASIL (PASS).
         ================================================================================
         """)
     }

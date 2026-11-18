@@ -59,6 +59,36 @@ public final class PrayerScheduler: ObservableObject {
         self.missedPrayerAlert = nil
     }
     
+    /// Mencatat timestamp sleep secara eksplisit (misal dari willSleepNotification)
+    public func recordSleep(at date: Date = Date()) {
+        self.recordedSleepTime = date
+    }
+    
+    /// Inspeksi nilai recordedSleepTime saat ini (untuk verifikasi deterministik)
+    public var currentRecordedSleepTime: Date? {
+        return recordedSleepTime
+    }
+    
+    /// Helper pengujian: mengatur status initial launch
+    public func setInitialLaunchForTesting(_ value: Bool) {
+        self.isInitialLaunch = value
+    }
+    
+    /// Helper pengujian: mengatur lastActiveTime
+    public func setLastActiveTimeForTesting(_ date: Date) {
+        self.lastActiveTime = date
+    }
+    
+    /// Helper pengujian: membaca kunci adzan yang telah tertrigger / ter-blacklist
+    public func getTriggeredPrayerKeysForTesting() -> Set<String> {
+        return self.triggeredPrayerKeys
+    }
+    
+    /// Helper pengujian: mereset kunci adzan yang tertrigger
+    public func clearTriggeredPrayerKeysForTesting() {
+        self.triggeredPrayerKeys.removeAll()
+    }
+    
     private func setupSubscriptions() {
         // 1. Pantau perubahan lokasi dan timezone
         LocationManager.shared.$latitude
@@ -90,8 +120,9 @@ public final class PrayerScheduler: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
+            let sleepTimestamp = Date()
             Task { @MainActor [weak self] in
-                self?.recordedSleepTime = Date()
+                self?.recordedSleepTime = sleepTimestamp
             }
         }
         observerTokens.append(willSleepToken)
@@ -151,8 +182,8 @@ public final class PrayerScheduler: ObservableObject {
     /// - Mencegah pemutaran audio adzan secara retroaktif untuk shalat yang telah lewat.
     /// - Mencegah false banner saat aplikasi baru pertama kali dijalankan.
     /// - Menerapkan kebijakan sopan jika Mac tidur lebih dari 24 jam.
-    public func handleWakeFromSleep() {
-        let now = Date()
+    public func handleWakeFromSleep(at wakeTime: Date = Date()) {
+        let now = wakeTime
         // Prioritaskan timestamp presisi yang ditangkap sebelum sleep
         let sleepStartTime = recordedSleepTime ?? lastActiveTime
         recordedSleepTime = nil
@@ -164,7 +195,8 @@ public final class PrayerScheduler: ObservableObject {
             recalculate(
                 latitude: LocationManager.shared.latitude,
                 longitude: LocationManager.shared.longitude,
-                timeZone: LocationManager.shared.currentTimeZone
+                timeZone: LocationManager.shared.currentTimeZone,
+                referenceDate: now
             )
             return
         }
@@ -175,7 +207,8 @@ public final class PrayerScheduler: ObservableObject {
             recalculate(
                 latitude: LocationManager.shared.latitude,
                 longitude: LocationManager.shared.longitude,
-                timeZone: LocationManager.shared.currentTimeZone
+                timeZone: LocationManager.shared.currentTimeZone,
+                referenceDate: now
             )
             return
         }
@@ -189,7 +222,7 @@ public final class PrayerScheduler: ObservableObject {
         if elapsed > Self.maxSleepDurationToAnalyze {
             self.missedPrayerAlert = "Mac berada dalam mode tidur lebih dari 24 jam. Jadwal shalat telah diperbarui secara otomatis."
             // Blacklist seluruh waktu shalat hari ini yang sudah lewat agar tidak memicu adzan
-            recalculate(latitude: lat, longitude: lon, timeZone: tz)
+            recalculate(latitude: lat, longitude: lon, timeZone: tz, referenceDate: now)
             if let current = self.schedule {
                 var cal = Calendar(identifier: .gregorian)
                 cal.timeZone = tz
@@ -253,12 +286,12 @@ public final class PrayerScheduler: ObservableObject {
             self.missedPrayerAlert = "Waktu \(parts)\(tzSuffix) telah masuk saat Mac berada dalam mode tidur."
         }
         
-        recalculate(latitude: lat, longitude: lon, timeZone: tz)
+        recalculate(latitude: lat, longitude: lon, timeZone: tz, referenceDate: now)
     }
     
-    public func recalculate(latitude: Double, longitude: Double, timeZone: TimeZone) {
+    public func recalculate(latitude: Double, longitude: Double, timeZone: TimeZone, referenceDate: Date = Date()) {
         let cityName = LocationManager.shared.locationName
-        let now = Date()
+        let now = referenceDate
         
         // 1. Penyesuaian Hari Ini
         var todayAdjustments: [PrayerName: Int] = [:]
