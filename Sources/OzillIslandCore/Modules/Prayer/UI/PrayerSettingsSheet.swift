@@ -34,25 +34,49 @@ public struct PrayerSettingsSheet: View {
                 
                 Spacer()
                 
-                // Placeholder to balance back button
                 Text("       ")
                     .font(.system(size: 12))
             }
             .padding(.bottom, 4)
             
-            // Picker Mode: Lokasi vs Waktu Shalat
+            // Picker Mode
             Picker("", selection: $selectedTab) {
-                Text("Jadwal & Notifikasi").tag(0)
+                Text("Jadwal & Ihtiyati").tag(0)
                 Text("Lokasi").tag(1)
             }
             .pickerStyle(SegmentedPickerStyle())
             
             if selectedTab == 0 {
-                // Tab 0: Jadwal, Reminder, Adzan, Koreksi
                 ScrollView(.vertical, showsIndicators: false) {
                     VStack(spacing: 10) {
+                        // Kebijakan Ihtiyati Box
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Kebijakan Ihtiyati (Buffer Waktu):")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.white.opacity(0.7))
+                            
+                            Picker("", selection: $settings.ihtiyatiPolicy) {
+                                ForEach(IhtiyatiPolicy.allCases) { policy in
+                                    Text(policy.rawValue).tag(policy)
+                                }
+                            }
+                            .pickerStyle(MenuPickerStyle())
+                            
+                            Text(settings.ihtiyatiPolicy == .none ? "Waktu dihitung murni secara astronomis tanpa toleransi menit." :
+                                 settings.ihtiyatiPolicy == .kemenag ? "Buffer terkalibrasi SIHAT Kemenag: Subuh/Isya +2m, Dzuhur/Ashar/Maghrib +3m." :
+                                 "Murni mengandalkan koreksi manual yang Anda tentukan di bawah.")
+                                .font(.system(size: 9.5))
+                                .foregroundColor(.cyan.opacity(0.85))
+                        }
+                        .padding(10)
+                        .background(Color.white.opacity(0.05))
+                        .cornerRadius(8)
+                        
+                        // Per-Prayer Config
                         ForEach(PrayerName.fardhuPrayers) { prayer in
                             let pref = settings.preferences[prayer] ?? PrayerPreference()
+                            let totalAdj = settings.effectiveAdjustment(for: prayer)
+                            let totalAdjSign = totalAdj > 0 ? "+\(totalAdj)" : "\(totalAdj)"
                             
                             VStack(spacing: 6) {
                                 HStack {
@@ -61,7 +85,13 @@ public struct PrayerSettingsSheet: View {
                                     Text(prayer.rawValue)
                                         .font(.system(size: 13, weight: .bold))
                                         .foregroundColor(.white)
+                                    
                                     Spacer()
+                                    
+                                    Text("Total koreksi: \(totalAdjSign)m")
+                                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                                        .foregroundColor(.cyan)
+                                    
                                     Toggle("", isOn: Binding(
                                         get: { pref.enabled },
                                         set: { settings.update(prayer, enabled: $0) }
@@ -101,20 +131,20 @@ public struct PrayerSettingsSheet: View {
                                         .labelsHidden()
                                     }
                                     
-                                    // Koreksi Ihtiyati row (-5 to +5)
+                                    // Manual Adjustment row (-5 to +5)
                                     HStack {
-                                        Text("Koreksi Ihtiyati:")
+                                        Text("Koreksi Manual Pengguna:")
                                             .font(.system(size: 11))
                                             .foregroundColor(.white.opacity(0.7))
                                         Spacer()
-                                        let adj = pref.adjustmentMinutes
-                                        let sign = adj > 0 ? "+\(adj)" : "\(adj)"
-                                        Stepper("\(sign) menit", value: Binding(
-                                            get: { pref.adjustmentMinutes },
-                                            set: { settings.update(prayer, adjustmentMinutes: $0) }
+                                        let manual = pref.manualAdjustmentMinutes
+                                        let manualSign = manual > 0 ? "+\(manual)" : "\(manual)"
+                                        Stepper("\(manualSign) menit", value: Binding(
+                                            get: { pref.manualAdjustmentMinutes },
+                                            set: { settings.update(prayer, manualAdjustmentMinutes: $0) }
                                         ), in: -5...5)
                                         .font(.system(size: 11, weight: .medium))
-                                        .foregroundColor(.cyan)
+                                        .foregroundColor(.yellow)
                                     }
                                 }
                             }
@@ -156,8 +186,8 @@ public struct PrayerSettingsSheet: View {
                             .foregroundColor(.white.opacity(0.8))
                         
                         Picker("", selection: $settings.locationMode) {
-                            Text("Otomatis (CoreLocation / Wi-Fi)").tag(LocationMode.automaticGPS)
-                            Text("Manual Pilih Kota").tag(LocationMode.manualPreset)
+                            Text("Otomatis (Layanan Lokasi macOS)").tag(LocationMode.automaticGPS)
+                            Text("Pilihan Manual (Offline)").tag(LocationMode.manualPreset)
                         }
                         .pickerStyle(RadioGroupPickerStyle())
                         .foregroundColor(.white)
@@ -165,7 +195,7 @@ public struct PrayerSettingsSheet: View {
                     
                     if settings.locationMode == .automaticGPS {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("Status GPS:")
+                            Text("Status Layanan Lokasi:")
                                 .font(.system(size: 11, weight: .medium))
                                 .foregroundColor(.white.opacity(0.6))
                             Text(vm.locationManager.statusMessage)
@@ -177,7 +207,7 @@ public struct PrayerSettingsSheet: View {
                             }) {
                                 HStack {
                                     Image(systemName: "location.circle.fill")
-                                    Text("Perbarui Lokasi GPS Sekarang")
+                                    Text("Perbarui Posisi Sekarang")
                                 }
                                 .padding(.vertical, 6)
                                 .padding(.horizontal, 12)
@@ -210,6 +240,11 @@ public struct PrayerSettingsSheet: View {
                                 }
                             }
                             .pickerStyle(MenuPickerStyle())
+                            
+                            Text("Mode manual tidak memerlukan Wi-Fi atau izin lokasi macOS.")
+                                .font(.system(size: 10))
+                                .foregroundColor(.white.opacity(0.5))
+                                .padding(.top, 2)
                         }
                         .padding(10)
                         .frame(maxWidth: .infinity, alignment: .leading)

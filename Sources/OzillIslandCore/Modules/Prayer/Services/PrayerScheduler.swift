@@ -1,11 +1,13 @@
 import Foundation
 import Combine
+import AppKit
 
 @MainActor
 public final class PrayerScheduler: ObservableObject {
     public static let shared = PrayerScheduler()
     
     @Published public var schedule: PrayerSchedule?
+    @Published public var tomorrowSchedule: PrayerSchedule?
     @Published public var nextPrayerName: PrayerName = .fajr
     @Published public var nextPrayerTime: Date = Date()
     @Published public var timeRemainingString: String = "--:--:--"
@@ -19,11 +21,12 @@ public final class PrayerScheduler: ObservableObject {
     
     public init() {
         setupSubscriptions()
+        setupSystemNotifications()
         startTimer()
     }
     
     private func setupSubscriptions() {
-        // Pantau perubahan lokasi
+        // 1. Pantau perubahan lokasi
         LocationManager.shared.$latitude
             .combineLatest(LocationManager.shared.$longitude, LocationManager.shared.$currentTimeZone)
             .sink { [weak self] lat, lon, tz in
@@ -31,9 +34,10 @@ public final class PrayerScheduler: ObservableObject {
             }
             .store(in: &cancellables)
         
-        // Pantau perubahan preferensi pengguna
+        // 2. Pantau perubahan preferensi & kebijakan ihtiyati pengguna
         PrayerSettings.shared.$preferences
-            .sink { [weak self] _ in
+            .combineLatest(PrayerSettings.shared.$ihtiyatiPolicy)
+            .sink { [weak self] _, _ in
                 guard let self = self else { return }
                 self.recalculate(
                     latitude: LocationManager.shared.latitude,
@@ -44,29 +48,97 @@ public final class PrayerScheduler: ObservableObject {
             .store(in: &cancellables)
     }
     
-    public func recalculate(latitude: Double, longitude: Double, timeZone: TimeZone) {
-        var adjustments: [PrayerName: Int] = [:]
-        for (name, pref) in PrayerSettings.shared.preferences {
-            adjustments[name] = pref.adjustmentMinutes
+    private func setupSystemNotifications() {
+        // Tangani saat Mac bangun dari sleep
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                self.recalculate(
+                    latitude: LocationManager.shared.latitude,
+                    longitude: LocationManager.shared.longitude,
+                    timeZone: LocationManager.shared.currentTimeZone
+                )
+            }
         }
         
-        let newSchedule = calculator.calculate(
+        // Tangani saat ada pergantian hari kalender atau jam sistem diubah
+        NotificationCenter.default.addObserver(
+            forName: .NSCalendarDayChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                self.recalculate(
+                    latitude: LocationManager.shared.latitude,
+                    longitude: LocationManager.shared.longitude,
+                    timeZone: LocationManager.shared.currentTimeZone
+                )
+            }
+        }
+        
+        NotificationCenter.default.addObserver(
+            forName: .NSSystemClockDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                self.recalculate(
+                    latitude: LocationManager.shared.latitude,
+                    longitude: LocationManager.shared.longitude,
+                    timeZone: LocationManager.shared.currentTimeZone
+                )
+            }
+        }
+    }
+    
+    public func recalculate(latitude: Double, longitude: Double, timeZone: TimeZone) {
+        var adjustments: [PrayerName: Int] = [:]
+        for name in PrayerName.allCases {
+            adjustments[name] = PrayerSettings.shared.effectiveAdjustment(for: name)
+        }
+        
+        let now = Date()
+        
+        // 1. Jadwal Hari Ini
+        let todaySched = calculator.calculate(
             latitude: latitude,
             longitude: longitude,
-            date: Date(),
+            date: now,
             timeZone: timeZone,
             adjustments: adjustments
         )
         
-        self.schedule = newSchedule
+        // 2. Jadwal Hari Besok (Dihitung astronomis independen untuk akurasi Subuh besok)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let tomorrowDate = calendar.date(byAdding: .day, value: 1, to: now) ?? now.addingTimeInterval(86400)
+        
+        let tomorrowSched = calculator.calculate(
+            latitude: latitude,
+            longitude: longitude,
+            date: tomorrowDate,
+            timeZone: timeZone,
+            adjustments: adjustments
+        )
+        
+        self.schedule = todaySched
+        self.tomorrowSchedule = tomorrowSched
+        
         updateNextPrayer()
         
-        // Schedule macOS notifications
-        if let sched = newSchedule {
+        // 3. Jadwalkan notifikasi sistem macOS
+        if let sched = todaySched {
             let prefs = PrayerSettings.shared.preferences
             Task {
                 await PrayerNotificationManager.shared.scheduleAll(
-                    schedule: sched,
+                    todaySchedule: sched,
+                    tomorrowSchedule: tomorrowSched,
                     preferences: prefs
                 )
             }
@@ -88,7 +160,7 @@ public final class PrayerScheduler: ObservableObject {
         let calendar = Calendar.current
         let currentDay = calendar.component(.day, from: now)
         
-        // Cek pergantian hari (midnight)
+        // Cek pergantian hari (midnight rollover)
         if lastCalculatedDay != -1 && currentDay != lastCalculatedDay {
             lastCalculatedDay = currentDay
             recalculate(
@@ -108,7 +180,7 @@ public final class PrayerScheduler: ObservableObject {
         guard let schedule = schedule else { return }
         let now = Date()
         
-        let next = schedule.nextPrayer(from: now)
+        let next = schedule.nextPrayer(from: now, tomorrowSchedule: tomorrowSchedule)
         self.nextPrayerName = next.prayer
         self.nextPrayerTime = next.time
         

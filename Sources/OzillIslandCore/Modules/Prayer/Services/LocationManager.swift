@@ -29,26 +29,29 @@ public final class LocationManager: NSObject, ObservableObject, CLLocationManage
     @Published public var currentTimeZone: TimeZone
     @Published public var isLocating: Bool = false
     @Published public var statusMessage: String = "Siap"
+    @Published public var isUsingOfflineFallback: Bool = false
     @Published public var authorizationStatus: CLAuthorizationStatus
     
     public override init() {
-        // Load fallback hierarchy:
-        // 1. Last Known Location
-        // 2. Default City (Jakarta)
+        // Hierarki Fallback:
+        // 1. Lokasi Tersimpan Terakhir (UserDefaults)
+        // 2. Default City (DKI Jakarta)
         if let savedData = UserDefaults.standard.data(forKey: lastLocationKey),
            let saved = try? JSONDecoder().decode(SavedLocation.self, from: savedData) {
             self.latitude = saved.latitude
             self.longitude = saved.longitude
             self.locationName = saved.name
             self.currentTimeZone = TimeZone(identifier: saved.timeZoneIdentifier) ?? .current
-            self.statusMessage = "Lokasi tersimpan: \(saved.name)"
+            self.statusMessage = "Lokasi tersimpan (Offline): \(saved.name)"
+            self.isUsingOfflineFallback = true
         } else {
             let defaultCity = CityPreset.defaultCity
             self.latitude = defaultCity.latitude
             self.longitude = defaultCity.longitude
             self.locationName = defaultCity.name
             self.currentTimeZone = TimeZone(identifier: defaultCity.timeZoneIdentifier) ?? .current
-            self.statusMessage = "Lokasi default: \(defaultCity.name)"
+            self.statusMessage = "Preset default (Offline): \(defaultCity.name)"
+            self.isUsingOfflineFallback = true
         }
         
         self.authorizationStatus = manager.authorizationStatus
@@ -58,10 +61,10 @@ public final class LocationManager: NSObject, ObservableObject, CLLocationManage
         manager.desiredAccuracy = kCLLocationAccuracyKilometer
     }
     
-    /// Meminta lokasi GPS sekali saja (single-shot, tidak menguras baterai)
+    /// Meminta lokasi CoreLocation satu kali (single-shot, tidak tracking continuous)
     public func requestSingleLocation() {
         isLocating = true
-        statusMessage = "Mendeteksi koordinat..."
+        statusMessage = "Mendeteksi posisi via Layanan Lokasi macOS..."
         
         let status = manager.authorizationStatus
         switch status {
@@ -71,20 +74,21 @@ public final class LocationManager: NSObject, ObservableObject, CLLocationManage
             manager.requestLocation()
         case .denied, .restricted:
             isLocating = false
-            fallbackToLastKnownOrPreset(reason: "Izin lokasi tidak diberikan")
+            fallbackToLastKnownOrPreset(reason: "Izin Layanan Lokasi belum diberikan")
         @unknown default:
             isLocating = false
-            fallbackToLastKnownOrPreset(reason: "Status lokasi tidak diketahui")
+            fallbackToLastKnownOrPreset(reason: "Status Layanan Lokasi tidak diketahui")
         }
     }
     
-    /// Mengatur lokasi manual berdasarkan preset kota
+    /// Mengatur lokasi manual berdasarkan preset kota (100% Offline tanpa GPS/Wi-Fi)
     public func setManualCity(_ city: CityPreset) {
         self.latitude = city.latitude
         self.longitude = city.longitude
         self.locationName = city.name
         self.currentTimeZone = TimeZone(identifier: city.timeZoneIdentifier) ?? .current
-        self.statusMessage = "Kota: \(city.name)"
+        self.statusMessage = "Preset Kota (Offline): \(city.name)"
+        self.isUsingOfflineFallback = true
         
         saveCurrentLocationLocally()
     }
@@ -102,20 +106,21 @@ public final class LocationManager: NSObject, ObservableObject, CLLocationManage
     }
     
     public func fallbackToLastKnownOrPreset(reason: String) {
+        isUsingOfflineFallback = true
         if let savedData = UserDefaults.standard.data(forKey: lastLocationKey),
            let saved = try? JSONDecoder().decode(SavedLocation.self, from: savedData) {
             self.latitude = saved.latitude
             self.longitude = saved.longitude
             self.locationName = saved.name
             self.currentTimeZone = TimeZone(identifier: saved.timeZoneIdentifier) ?? .current
-            self.statusMessage = "\(reason) (memakai lokasi tersimpan: \(saved.name))"
+            self.statusMessage = "\(reason) → Memakai lokasi tersimpan: \(saved.name)"
         } else {
             let def = CityPreset.defaultCity
             self.latitude = def.latitude
             self.longitude = def.longitude
             self.locationName = def.name
             self.currentTimeZone = TimeZone(identifier: def.timeZoneIdentifier) ?? .current
-            self.statusMessage = "\(reason) (fallback: \(def.name))"
+            self.statusMessage = "\(reason) → Fallback: \(def.name)"
         }
     }
     
@@ -123,18 +128,20 @@ public final class LocationManager: NSObject, ObservableObject, CLLocationManage
         self.isLocating = false
         self.latitude = location.coordinate.latitude
         self.longitude = location.coordinate.longitude
+        self.isUsingOfflineFallback = false
         
+        // Reverse geocoding (memerlukan koneksi jaringan macOS)
         CLGeocoder().reverseGeocodeLocation(location) { [weak self] placemarks, error in
             guard let self = self else { return }
             Task { @MainActor in
                 if let placemark = placemarks?.first {
-                    let city = placemark.locality ?? placemark.subAdministrativeArea ?? placemark.administrativeArea ?? "Lokasi GPS"
+                    let city = placemark.locality ?? placemark.subAdministrativeArea ?? placemark.administrativeArea ?? "Posisi Terdeteksi"
                     self.locationName = city
                     if let tz = placemark.timeZone {
                         self.currentTimeZone = tz
                     }
                 }
-                self.statusMessage = "GPS aktif: \(self.locationName)"
+                self.statusMessage = "Lokasi aktif (Layanan macOS): \(self.locationName)"
                 self.saveCurrentLocationLocally()
             }
         }
@@ -147,7 +154,7 @@ public final class LocationManager: NSObject, ObservableObject, CLLocationManage
             requestSingleLocation()
         case .denied, .restricted:
             isLocating = false
-            fallbackToLastKnownOrPreset(reason: "Izin lokasi ditolak")
+            fallbackToLastKnownOrPreset(reason: "Izin lokasi tidak diberikan")
         default:
             break
         }
@@ -164,7 +171,7 @@ public final class LocationManager: NSObject, ObservableObject, CLLocationManage
     
     public nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         Task { @MainActor in
-            self.fallbackToLastKnownOrPreset(reason: "GPS gagal: \(error.localizedDescription)")
+            self.fallbackToLastKnownOrPreset(reason: "Gagal mendeteksi via jaringan: \(error.localizedDescription)")
         }
     }
     

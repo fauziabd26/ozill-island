@@ -41,14 +41,21 @@ public struct PrayerSchedule: Codable {
         ]
     }
     
-    /// Menentukan jadwal shalat berikutnya dari waktu sekarang
-    public func nextPrayer(from referenceDate: Date = Date()) -> (prayer: PrayerName, time: Date) {
+    /// Menentukan jadwal shalat berikutnya dari waktu referensi.
+    /// Jika seluruh jadwal hari ini sudah lewat, menggunakan jadwal Subuh besok yang dihitung astronomis.
+    public func nextPrayer(from referenceDate: Date = Date(), tomorrowSchedule: PrayerSchedule? = nil) -> (prayer: PrayerName, time: Date) {
         for item in items where item.time > referenceDate {
             return item
         }
-        // Jika sudah lewat Isya, shalat berikutnya adalah Subuh besok
-        let tomorrowFajr = fajr.addingTimeInterval(86400)
-        return (.fajr, tomorrowFajr)
+        
+        // Jika sudah melewati Isya, ambil Subuh besok
+        if let tomorrowFajr = tomorrowSchedule?.fajr {
+            return (.fajr, tomorrowFajr)
+        }
+        
+        // Fallback jika tomorrowSchedule belum tersedia
+        let fallbackTomorrowFajr = fajr.addingTimeInterval(86400)
+        return (.fajr, fallbackTomorrowFajr)
     }
     
     /// Menentukan shalat saat ini (shalat terakhir yang sudah masuk)
