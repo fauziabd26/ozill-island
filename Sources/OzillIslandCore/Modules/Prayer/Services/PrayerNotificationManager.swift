@@ -20,6 +20,7 @@ public extension TimeZone {
 /// Protokol abstraksi notification center untuk memungkinkan pengujian deterministik dan mock
 public protocol PrayerNotificationCenterProtocol: Sendable {
     func requestAuthorization(options: UNAuthorizationOptions) async throws -> Bool
+    func removePendingNotificationRequests(withIdentifiers identifiers: [String]) async
     func removeAllPendingNotificationRequests() async
     func add(_ request: UNNotificationRequest) async throws
 }
@@ -42,6 +43,10 @@ public final class DefaultNotificationCenterAdapter: PrayerNotificationCenterPro
         guard let center = center else { return false }
         return try await center.requestAuthorization(options: options)
     }
+    public func removePendingNotificationRequests(withIdentifiers identifiers: [String]) async {
+        guard let center = center else { return }
+        center.removePendingNotificationRequests(withIdentifiers: identifiers)
+    }
     public func removeAllPendingNotificationRequests() async {
         guard let center = center else { return }
         center.removeAllPendingNotificationRequests()
@@ -57,6 +62,30 @@ public final class DefaultNotificationCenterAdapter: PrayerNotificationCenterPro
 /// untuk mencegah race condition dan actor re-entrancy overlapping saat Mac beroperasi.
 public actor PrayerNotificationManager {
     public static let shared = PrayerNotificationManager()
+    
+    // MARK: - Named Constants & Namespace
+    public static let maxDiagnosticErrorsCount: Int = 50
+    public static let notificationNamespacePrefix = "ozill-prayer-"
+    
+    /// Menghasilkan seluruh kemungkinan identifier notifikasi yang dimiliki modul Prayer.
+    /// Mencakup reminder dan adzan untuk hari ini dan hari esok, serta format legacy
+    /// agar preferensi yang dinonaktifkan tetap terbersihkan tanpa menyentuh modul lain.
+    public static var allPossiblePrayerNotificationIdentifiers: [String] {
+        var ids: [String] = []
+        for prayer in PrayerName.allCases {
+            ids.append("ozill-prayer-today-reminder-\(prayer.rawValue)")
+            ids.append("ozill-prayer-today-adhan-\(prayer.rawValue)")
+            ids.append("ozill-prayer-tomorrow-reminder-\(prayer.rawValue)")
+            ids.append("ozill-prayer-tomorrow-adhan-\(prayer.rawValue)")
+            // Dukungan backward-compatibility pembersihan untuk identifier format lama
+            ids.append("ozill-today-reminder-\(prayer.rawValue)")
+            ids.append("ozill-today-adhan-\(prayer.rawValue)")
+            ids.append("ozill-tomorrow-reminder-\(prayer.rawValue)")
+            ids.append("ozill-tomorrow-adhan-\(prayer.rawValue)")
+        }
+        return ids
+    }
+    
     private let center: PrayerNotificationCenterProtocol
     private var currentSchedulingRevision: UInt64 = 0
     private var ongoingTask: Task<Void, Never>?
@@ -156,7 +185,7 @@ public actor PrayerNotificationManager {
                     let components = cal.dateComponents([.year, .month, .day, .hour, .minute], from: reminderDate)
                     let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
                     let request = UNNotificationRequest(
-                        identifier: "ozill-today-reminder-\(prayer.rawValue)",
+                        identifier: "\(Self.notificationNamespacePrefix)today-reminder-\(prayer.rawValue)",
                         content: content,
                         trigger: trigger
                     )
@@ -176,7 +205,7 @@ public actor PrayerNotificationManager {
                 let components = cal.dateComponents([.year, .month, .day, .hour, .minute], from: prayerDate)
                 let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
                 let request = UNNotificationRequest(
-                    identifier: "ozill-today-adhan-\(prayer.rawValue)",
+                    identifier: "\(Self.notificationNamespacePrefix)today-adhan-\(prayer.rawValue)",
                     content: content,
                     trigger: trigger
                 )
@@ -205,7 +234,7 @@ public actor PrayerNotificationManager {
                         let components = cal.dateComponents([.year, .month, .day, .hour, .minute], from: reminderDate)
                         let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
                         let request = UNNotificationRequest(
-                            identifier: "ozill-tomorrow-reminder-Subuh",
+                            identifier: "\(Self.notificationNamespacePrefix)tomorrow-reminder-Subuh",
                             content: content,
                             trigger: trigger
                         )
@@ -225,7 +254,7 @@ public actor PrayerNotificationManager {
                     let components = cal.dateComponents([.year, .month, .day, .hour, .minute], from: tomorrowFajr)
                     let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
                     let request = UNNotificationRequest(
-                        identifier: "ozill-tomorrow-adhan-Subuh",
+                        identifier: "\(Self.notificationNamespacePrefix)tomorrow-adhan-Subuh",
                         content: content,
                         trigger: trigger
                     )
@@ -261,8 +290,9 @@ public actor PrayerNotificationManager {
             return
         }
         
-        // Hapus pending lama secara bersih setelah batch sebelumnya dipastikan selesai
-        await center.removeAllPendingNotificationRequests()
+        // Hapus HANYA notifikasi milik modul Prayer secara spesifik agar tidak menghapus notifikasi modul lain
+        let prayerIdentifiersToClean = Self.allPossiblePrayerNotificationIdentifiers
+        await center.removePendingNotificationRequests(withIdentifiers: prayerIdentifiersToClean)
         
         // Daftarkan notifikasi baru dengan verifikasi revision dan error-handling eksplisit
         for req in pendingRequests {
@@ -275,6 +305,9 @@ public actor PrayerNotificationManager {
                 let errorMsg = error.localizedDescription
                 print("PrayerNotificationManager: Failed to add notification \(req.identifier) - \(errorMsg)")
                 lastErrors.append((identifier: req.identifier, error: errorMsg))
+                if lastErrors.count > Self.maxDiagnosticErrorsCount {
+                    lastErrors.removeFirst(lastErrors.count - Self.maxDiagnosticErrorsCount)
+                }
             }
         }
     }

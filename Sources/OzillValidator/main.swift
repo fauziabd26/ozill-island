@@ -5,7 +5,9 @@ import UserNotifications
 
 actor MockNotificationCenter: PrayerNotificationCenterProtocol {
     private var _addedRequests: [UNNotificationRequest] = []
+    private var _removeCallCount = 0
     private var _removeAllCallCount = 0
+    private var _removedIdentifierBatches: [[String]] = []
     let delayNanoseconds: UInt64
     let shouldFailOnAdd: Bool
     
@@ -13,8 +15,16 @@ actor MockNotificationCenter: PrayerNotificationCenterProtocol {
         return _addedRequests
     }
     
+    var removeCallCount: Int {
+        return _removeCallCount
+    }
+    
     var removeAllCallCount: Int {
         return _removeAllCallCount
+    }
+    
+    var removedIdentifierBatches: [[String]] {
+        return _removedIdentifierBatches
     }
     
     init(delayNanoseconds: UInt64 = 0, shouldFailOnAdd: Bool = false) {
@@ -24,6 +34,13 @@ actor MockNotificationCenter: PrayerNotificationCenterProtocol {
     
     func requestAuthorization(options: UNAuthorizationOptions) async throws -> Bool {
         return true
+    }
+    
+    func removePendingNotificationRequests(withIdentifiers identifiers: [String]) async {
+        _removeCallCount += 1
+        _removedIdentifierBatches.append(identifiers)
+        let idSet = Set(identifiers)
+        _addedRequests.removeAll { idSet.contains($0.identifier) }
     }
     
     func removeAllPendingNotificationRequests() async {
@@ -129,7 +146,7 @@ struct OzillValidatorApp {
         }
 
         // MARK: - BAGIAN 2: AUTOMATED VALIDATION ASSERTIONS
-        print("🧪 [BAGIAN 2: AUTOMATED VALIDATION ASSERTIONS (20 ASSERTION SUITES)]\n")
+        print("🧪 [BAGIAN 2: AUTOMATED VALIDATION ASSERTIONS (21 ASSERTION SUITES)]\n")
 
         var testCount = 0
         func runTest(_ name: String, block: () throws -> Void) {
@@ -539,8 +556,8 @@ struct OzillValidatorApp {
             
             // Verifikasi bahwa antrean serial menyelesaikan seluruh proses secara bersih
             let finalRequests = await mockCenter.addedRequests
-            let removeCalls = await mockCenter.removeAllCallCount
-            assert(removeCalls >= 1, "removeAllPendingNotificationRequests harus dipanggil")
+            let removeCalls = await mockCenter.removeCallCount
+            assert(removeCalls >= 1, "removePendingNotificationRequests harus dipanggil")
             assert(finalRequests.count <= 10, "Jumlah notifikasi tidak boleh melebihi batas batch aktif")
         }
 
@@ -586,6 +603,72 @@ struct OzillValidatorApp {
             assert(recordedErrors[0].error.contains("Simulated center.add failure"), "Deskripsi error harus sesuai")
         }
 
+        // Assertion 21: Namespace Isolation of Prayer Notifications
+        await runAsyncTest("Isolasi Namespace Notifikasi: Pembersihan notifikasi Prayer Engine tidak menghapus notifikasi modul lain") {
+            let mockCenter = MockNotificationCenter()
+            
+            // Simulasikan notifikasi aktif dari modul lain (misal Battery & Calendar)
+            let batteryContent = UNMutableNotificationContent()
+            batteryContent.title = "Baterai Lemah"
+            let batteryReq = UNNotificationRequest(
+                identifier: "ozill-battery-low-alert",
+                content: batteryContent,
+                trigger: nil
+            )
+            try await mockCenter.add(batteryReq)
+            
+            let calendarContent = UNMutableNotificationContent()
+            calendarContent.title = "Rapat Standup"
+            let calendarReq = UNNotificationRequest(
+                identifier: "ozill-calendar-event-standup",
+                content: calendarContent,
+                trigger: nil
+            )
+            try await mockCenter.add(calendarReq)
+            
+            // Tambahkan juga notifikasi shalat lama
+            let oldPrayerContent = UNMutableNotificationContent()
+            oldPrayerContent.title = "Adzan Dzuhur Lama"
+            let oldPrayerReq = UNNotificationRequest(
+                identifier: "ozill-prayer-today-adhan-Dzuhur",
+                content: oldPrayerContent,
+                trigger: nil
+            )
+            try await mockCenter.add(oldPrayerReq)
+            
+            let initialCount = (await mockCenter.addedRequests).count
+            assert(initialCount == 3, "Harus ada 3 request awal")
+            
+            // Inisialisasi manager dan jadwalkan shalat
+            let manager = PrayerNotificationManager(center: mockCenter)
+            guard let testSched = calculator.calculate(latitude: -6.2088, longitude: 106.8456, date: baseTestDate, timeZone: tzJakarta, adjustments: [:]) else {
+                fatalError("Gagal menghitung testSched")
+            }
+            
+            await manager.scheduleAll(
+                todaySchedule: testSched,
+                tomorrowSchedule: nil,
+                preferences: PrayerSettings.shared.preferences,
+                timeZone: tzJakarta
+            )
+            
+            let finalRequests = await mockCenter.addedRequests
+            let remainingIdentifiers = Set(finalRequests.map { $0.identifier })
+            
+            // 1. Notifikasi modul lain HARUS tetap bertahan utuh!
+            assert(remainingIdentifiers.contains("ozill-battery-low-alert"), "Notifikasi baterai TIDAK boleh terhapus oleh Prayer Engine")
+            assert(remainingIdentifiers.contains("ozill-calendar-event-standup"), "Notifikasi kalender TIDAK boleh terhapus oleh Prayer Engine")
+            
+            // 2. Seluruh batch identifier yang dihapus harus secara ketat berada di domain identifier prayer
+            let removedBatches = await mockCenter.removedIdentifierBatches
+            assert(!removedBatches.isEmpty, "Harus ada operasi pembersihan identifier prayer")
+            for batch in removedBatches {
+                for id in batch {
+                    assert(!id.contains("battery") && !id.contains("calendar"), "Daftar pembersihan tidak boleh menyentuh modul lain: \(id)")
+                }
+            }
+        }
+
         print("""
 
         ================================================================================
@@ -595,8 +678,9 @@ struct OzillValidatorApp {
            3. Sleep/Wake mencatat MissedPrayerOccurrence terstruktur (nama, waktu, zona).
            4. Timestamp sleep ditangkap secara sinkron sebelum dispatch Task MainActor.
            5. FIFO Serialized Notification Queue menjamin tidak ada overlapping / stale requests.
-           6. Error add notifikasi tercatat transparan dan dapat didiagnosa.
-           7. Seluruh 20 Automated Validation Assertions BERHASIL (PASS).
+           6. Isolasi Namespace Notifikasi (ozill-prayer-*) menjamin modul lain aman dari pembersihan.
+           7. Error add notifikasi tercatat transparan dan dibatasi max 50 riwayat.
+           8. Seluruh 21 Automated Validation Assertions BERHASIL (PASS).
         ================================================================================
         """)
     }
