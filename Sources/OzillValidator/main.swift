@@ -55,7 +55,7 @@ struct OzillValidatorApp {
             
             print("📍 Wilayah: \(snapshot.regionName) | Tanggal: \(snapshot.targetDateString)")
             print("   Koordinat: (Lat: \(snapshot.latitude), Lon: \(snapshot.longitude)) | TZ: \(snapshot.timeZoneIdentifier)")
-            print("   Sumber: \(snapshot.referenceUrl) (Diarsip: \(snapshot.retrievedAt))")
+            print("   Sumber: \(snapshot.referenceUrl) (Diarsip: \(snapshot.retrievedAt) | Metode: \(snapshot.verificationMethod.rawValue))")
             print("  +----------+---------------+----------------+---------------+--------------+----------------+")
             print("  | Waktu    | Falak Raw(0m) | SIHAT Kemenag  | Selisih Raw   | Base Buffer  | Delta SIHAT    |")
             print("  +----------+---------------+----------------+---------------+--------------+----------------+")
@@ -153,11 +153,13 @@ struct OzillValidatorApp {
             let match = SihatSnapshotRegistry.match(cityName: "Jakarta Pusat", dateString: "2026-11-18")
             assert(match != nil)
             assert(match?.regionName == "DKI Jakarta")
+            assert(match?.verificationMethod == .manuallyArchived)
             assert(match?.empiricalOffsets[.dhuhr] == 3)
             
             // Periksa snapshot tanggal 19 Nov (terbukti Dzuhur bergeser offset ke +4)
             let match19 = SihatSnapshotRegistry.match(cityName: "DKI Jakarta", dateString: "2026-11-19")
             assert(match19 != nil)
+            assert(match19?.verificationMethod == .manuallyArchived)
             assert(match19?.empiricalOffsets[.dhuhr] == 4)
         }
 

@@ -2,6 +2,11 @@ import Foundation
 import Combine
 
 // MARK: - Model Snapshot Resmi SIHAT Kemenag RI
+public enum VerificationMethod: String, Codable, Equatable {
+    case manuallyArchived = "Manual Archive"
+    case fetchedFromOfficialSource = "Official Portal Fetch"
+}
+
 /// Merepresentasikan data snapshot empiris resmi yang diambil dari SIHAT Bimas Islam Kemenag RI.
 /// Setiap snapshot memiliki identitas lengkap untuk menjamin integritas data (tidak digeneralisasi untuk tanggal lain).
 public struct SihatOfficialSnapshot: Codable, Equatable {
@@ -12,6 +17,7 @@ public struct SihatOfficialSnapshot: Codable, Equatable {
     public let targetDateString: String // Format: YYYY-MM-DD
     public let referenceUrl: String
     public let retrievedAt: String // ISO 8601
+    public let verificationMethod: VerificationMethod
     public let officialTimes: [PrayerName: String] // HH:mm
     public let empiricalOffsets: [PrayerName: Int] // Menit selisih vs Hisab Falak Mentah
     
@@ -23,6 +29,7 @@ public struct SihatOfficialSnapshot: Codable, Equatable {
         targetDateString: String,
         referenceUrl: String,
         retrievedAt: String,
+        verificationMethod: VerificationMethod = .manuallyArchived,
         officialTimes: [PrayerName: String],
         empiricalOffsets: [PrayerName: Int]
     ) {
@@ -33,6 +40,7 @@ public struct SihatOfficialSnapshot: Codable, Equatable {
         self.targetDateString = targetDateString
         self.referenceUrl = referenceUrl
         self.retrievedAt = retrievedAt
+        self.verificationMethod = verificationMethod
         self.officialTimes = officialTimes
         self.empiricalOffsets = empiricalOffsets
     }
@@ -51,6 +59,7 @@ public enum SihatSnapshotRegistry {
             targetDateString: "2026-11-18",
             referenceUrl: "https://bimasislam.kemenag.go.id/jadwalshalat",
             retrievedAt: "2026-11-18T10:00:00+07:00",
+            verificationMethod: .manuallyArchived,
             officialTimes: [
                 .fajr: "04:05",
                 .sunrise: "05:25",
@@ -77,6 +86,7 @@ public enum SihatSnapshotRegistry {
             targetDateString: "2026-11-18",
             referenceUrl: "https://bimasislam.kemenag.go.id/jadwalshalat",
             retrievedAt: "2026-11-18T10:00:00+07:00",
+            verificationMethod: .manuallyArchived,
             officialTimes: [
                 .fajr: "03:40",
                 .sunrise: "04:57",
@@ -103,6 +113,7 @@ public enum SihatSnapshotRegistry {
             targetDateString: "2026-11-19",
             referenceUrl: "https://bimasislam.kemenag.go.id/jadwalshalat",
             retrievedAt: "2026-11-18T10:00:00+07:00",
+            verificationMethod: .manuallyArchived,
             officialTimes: [
                 .fajr: "04:05",
                 .sunrise: "05:25",
@@ -313,7 +324,7 @@ public final class PrayerSettings: ObservableObject {
                 let manual = preferences[prayer]?.manualAdjustmentMinutes ?? 0
                 let total = baseOffset + manual
                 let sign = total > 0 ? "+\(total)" : "\(total)"
-                return (total, true, "Snapshot SIHAT Kemenag \(snapshot.regionName) [\(dateStr)] (\(sign)m)")
+                return (total, true, "Snapshot SIHAT Kemenag \(snapshot.regionName) [\(dateStr)] [\(snapshot.verificationMethod.rawValue)] (\(sign)m)")
             } else {
                 // Tidak ada snapshot resmi untuk tanggal/kota ini: jangan tebak atau karang!
                 let manual = preferences[prayer]?.manualAdjustmentMinutes ?? 0
