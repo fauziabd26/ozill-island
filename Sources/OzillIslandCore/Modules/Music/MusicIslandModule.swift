@@ -10,7 +10,14 @@ public final class MusicIslandModule: IslandModule {
     public let associatedMode: IslandMode = .music
     
     public var provider: (any MusicProvider)?
-    public var playbackState: PlaybackState = .stopped
+    public var playbackState: PlaybackState = .stopped {
+        didSet {
+            if playbackState.isPlaying {
+                lastPlayedTimestamp = Date()
+            }
+        }
+    }
+    private var lastPlayedTimestamp: Date?
     
     public var capabilities: ModuleCapability {
         [.collapsedPill, .expandedSheet, .mediaControl]
@@ -27,6 +34,11 @@ public final class MusicIslandModule: IslandModule {
     public var currentPriority: ModulePriority {
         if playbackState.isPlaying {
             return .activeMedia
+        }
+        // Jika baru di-pause dalam 30 detik terakhir, pertahankan prioritas (50) di atas standby (40)
+        // agar Island musik tidak langsung lenyap saat pengguna berpindah tab atau jeda lagu!
+        if let last = lastPlayedTimestamp, Date().timeIntervalSince(last) < 30.0, playbackState == .paused {
+            return ModulePriority(50)
         }
         return .background
     }

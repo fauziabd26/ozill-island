@@ -25,7 +25,7 @@ public final class EdgeMusicAdapter: BrowserAdapter, @unchecked Sendable {
                 repeat with t in tabs of w
                     set tabIndex to tabIndex + 1
                     set u to URL of t
-                    if u contains "youtube.com/watch" or u contains "music.youtube.com" then
+                    if u contains "youtube.com" or u contains "youtu.be" then
                         set isYTM to (u contains "music.youtube.com")
                         set jsScript to "JSON.stringify((function() { " & ¬
                             "var v = document.querySelector('video'); " & ¬

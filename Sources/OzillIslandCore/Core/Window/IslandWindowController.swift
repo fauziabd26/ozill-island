@@ -20,8 +20,8 @@ public final class IslandWindowController: NSObject {
             return
         }
         
-        let initialWidth: CGFloat = 300
-        let initialHeight: CGFloat = 46
+        let initialWidth: CGFloat = 360
+        let initialHeight: CGFloat = 48
         let rect = calculateFrame(width: initialWidth, height: initialHeight)
         
         let newPanel = IslandPanel(contentRect: rect)
@@ -111,8 +111,8 @@ public final class IslandWindowController: NSObject {
         
         switch state {
         case .collapsed:
-            width = 300
-            height = 46
+            width = 360
+            height = 48
         case .expanded:
             width = 390
             height = 405

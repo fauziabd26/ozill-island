@@ -60,20 +60,8 @@ public final class BrowserMusicProvider: MusicProvider, @unchecked Sendable {
         guard !all.isEmpty else { return nil }
         
         return lock.withLock { () -> NowPlayingItem? in
-            if let active = currentActiveSession() {
-                return active.nowPlaying
-            }
-            // Prioritas: Cari yang sedang playing
-            if let playing = all.first(where: { $0.isPlaying }) {
-                self.selectedSessionId = playing.id
-                return playing.nowPlaying
-            }
-            // Fallback: Sesi pertama yang tersedia
-            if let first = all.first {
-                self.selectedSessionId = first.id
-                return first.nowPlaying
-            }
-            return nil
+            guard let active = currentActiveSession() else { return nil }
+            return active.nowPlaying
         }
     }
     
@@ -122,11 +110,17 @@ public final class BrowserMusicProvider: MusicProvider, @unchecked Sendable {
     // MARK: - Internal Helpers
     
     private func currentActiveSession() -> BrowserMediaSession? {
+        // 1. Jika pengguna secara manual memilih tab sesi tertentu, hormati seleksi manual
         if let selected = selectedSessionId,
            let match = activeSessions.first(where: { $0.id == selected }) {
             return match
         }
-        return activeSessions.first(where: { $0.isPlaying }) ?? activeSessions.first
+        // 2. Prioritas otomatis: Cari tab yang sedang .isPlaying
+        if let playing = activeSessions.first(where: { $0.isPlaying }) {
+            return playing
+        }
+        // 3. Fallback: sesi pertama yang tersedia
+        return activeSessions.first
     }
     
     private func resolveActiveTarget() throws -> (BrowserMediaSession, BrowserAdapter) {

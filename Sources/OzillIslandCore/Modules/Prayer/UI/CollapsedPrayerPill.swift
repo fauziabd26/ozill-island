@@ -32,37 +32,41 @@ public struct CollapsedPrayerPill: View {
                     Text(vm.audioManager.isPlaying ? "Adzan \(vm.audioManager.currentPrayerName)" : vm.scheduler.nextPrayerName.rawValue)
                         .font(.system(size: 11.5, weight: .semibold, design: .rounded))
                         .foregroundColor(palette.primaryText)
+                        .lineLimit(1)
                     
                     if let schedule = vm.scheduler.schedule {
                         Text(schedule.formattedTime(for: vm.scheduler.nextPrayerName, timeZone: vm.locationManager.currentTimeZone))
                             .font(.system(size: 9.5, weight: .regular, design: .monospaced))
                             .foregroundColor(palette.secondaryText)
+                            .lineLimit(1)
                     }
                 }
             }
+            .fixedSize(horizontal: true, vertical: false)
             
-            Spacer(minLength: 4)
+            Spacer(minLength: 6)
             
-            // Center Glance: Tanggal & Jam
-            HStack(spacing: 4) {
+            // Center Glance: Tanggal & Jam (Full tanpa titik-titik)
+            HStack(spacing: 5) {
                 Text(sys.shortDateMasehi)
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(size: 10.5, weight: .medium))
                     .foregroundColor(palette.secondaryText)
                 Text("•")
-                    .font(.system(size: 7))
+                    .font(.system(size: 8))
                     .foregroundColor(palette.secondaryText.opacity(0.4))
                 Text(sys.currentTimeString)
-                    .font(.system(size: 10.5, weight: .bold, design: .monospaced))
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
                     .foregroundColor(palette.primaryText)
             }
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2.5)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
             .background(
                 Capsule(style: .continuous)
-                    .fill(palette.cardBackground.opacity(0.7))
+                    .fill(palette.cardBackground.opacity(0.8))
             )
+            .fixedSize(horizontal: true, vertical: false)
             
-            Spacer(minLength: 4)
+            Spacer(minLength: 6)
             
             // Right: Countdown or Playing Indicator
             if vm.audioManager.isPlaying {
@@ -84,26 +88,28 @@ public struct CollapsedPrayerPill: View {
                     .foregroundColor(.white)
                 }
                 .buttonStyle(PlainButtonStyle())
+                .fixedSize(horizontal: true, vertical: false)
             } else {
-                HStack(spacing: 3) {
+                HStack(spacing: 4) {
                     Image(systemName: "hourglass")
-                        .font(.system(size: 8.5))
+                        .font(.system(size: 9))
                         .foregroundColor(palette.secondaryText)
                     Text(vm.scheduler.timeRemainingString)
-                        .font(.system(size: 10.5, weight: .bold, design: .monospaced))
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
                         .foregroundColor(accent)
                 }
-                .padding(.horizontal, 7)
-                .padding(.vertical, 3)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3.5)
                 .background(
                     Capsule(style: .continuous)
                         .fill(palette.cardBackground)
                 )
+                .fixedSize(horizontal: true, vertical: false)
             }
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 14)
         .padding(.vertical, 6)
-        .frame(width: 290, height: 38)
+        .frame(width: 360, height: 40)
         .background(
             Capsule(style: .continuous)
                 .fill(palette.background)
