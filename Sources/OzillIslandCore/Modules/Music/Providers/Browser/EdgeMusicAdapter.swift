@@ -33,11 +33,14 @@ public final class EdgeMusicAdapter: BrowserAdapter, @unchecked Sendable {
                             "var title = document.title; " & ¬
                             "var artist = ''; " & ¬
                             "var isMusic = window.location.hostname.indexOf('music.youtube.com') !== -1; " & ¬
+                            "var art = ''; " & ¬
                             "if (isMusic) { " & ¬
                             "   var titleEl = document.querySelector('ytmusic-player-bar .title'); " & ¬
                             "   if (titleEl) title = titleEl.textContent.trim(); " & ¬
                             "   var bylineEl = document.querySelector('ytmusic-player-bar .byline'); " & ¬
                             "   if (bylineEl) artist = bylineEl.textContent.trim(); " & ¬
+                            "   var imgEl = document.querySelector('ytmusic-player-bar .image, ytmusic-player-bar img'); " & ¬
+                            "   if (imgEl && imgEl.src) art = imgEl.src; " & ¬
                             "} else { " & ¬
                             "   var chanEl = document.querySelector('#owner #channel-name a, #upload-info #channel-name a'); " & ¬
                             "   if (chanEl) artist = chanEl.textContent.trim(); " & ¬
@@ -45,6 +48,7 @@ public final class EdgeMusicAdapter: BrowserAdapter, @unchecked Sendable {
                             "return { " & ¬
                             "   title: title, " & ¬
                             "   artist: artist, " & ¬
+                            "   artwork: art, " & ¬
                             "   currentTime: v.currentTime, " & ¬
                             "   duration: isNaN(v.duration) ? 0 : v.duration, " & ¬
                             "   paused: v.paused " & ¬
@@ -156,6 +160,10 @@ public final class EdgeMusicAdapter: BrowserAdapter, @unchecked Sendable {
             let duration = dict["duration"] as? TimeInterval ?? 0
             let paused = dict["paused"] as? Bool ?? true
             
+            let rawArtwork = dict["artwork"] as? String
+            let thumbnailURL = (rawArtwork != nil && !rawArtwork!.isEmpty) ? rawArtwork : BrowserMediaHelper.extractYouTubeThumbnail(from: url)
+            let artworkURL = thumbnailURL.flatMap { URL(string: $0) }
+            
             let sessionId = "edge::\(winIdx)::\(tabIdx)"
             let source: MediaSourceType = isYTM ? .youtubeMusic : .browser
             
@@ -163,7 +171,7 @@ public final class EdgeMusicAdapter: BrowserAdapter, @unchecked Sendable {
                 title: title.isEmpty ? "YouTube Media" : title,
                 artist: artist.isEmpty ? (isYTM ? "YouTube Music" : "YouTube") : artist,
                 album: browserDisplayName,
-                artworkURL: nil,
+                artworkURL: artworkURL,
                 duration: duration,
                 playbackPosition: currentTime,
                 source: source

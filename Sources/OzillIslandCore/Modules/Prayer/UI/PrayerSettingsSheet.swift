@@ -4,6 +4,8 @@ public struct PrayerSettingsSheet: View {
     @ObservedObject var vm: PrayerIslandViewModel
     @ObservedObject private var settings = PrayerSettings.shared
     @ObservedObject private var theme = IslandThemeManager.shared
+    @ObservedObject private var launchManager = LaunchAtLoginManager.shared
+    @ObservedObject private var sys = SystemInfoService.shared
     @State private var selectedTab: Int = 0
     @State private var customHexInput: String = ""
     
@@ -351,11 +353,94 @@ public struct PrayerSettingsSheet: View {
                 // 3. Live Preview
                 livePreviewSection(palette: palette, accent: accent)
                 
-                // 4. Reset Button
+                // 4. Sistem & Integrasi macOS (Launch at Login, Shortcut, Test Charger)
+                systemFeaturesSection(palette: palette, accent: accent)
+                
+                // 5. Reset Button
                 resetThemeButton(palette: palette)
             }
         }
         .frame(maxHeight: 280)
+    }
+    
+    @ViewBuilder
+    private func systemFeaturesSection(palette: IslandColorPalette, accent: Color) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Sistem & Integrasi macOS:")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundColor(palette.secondaryText)
+            
+            VStack(spacing: 8) {
+                // Launch at Login Toggle
+                HStack {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Buka Otomatis saat Login")
+                            .font(.system(size: 11.5, weight: .semibold))
+                            .foregroundColor(palette.primaryText)
+                        Text("Jalankan Ozill Island setiap kali Mac menyala")
+                            .font(.system(size: 9.5))
+                            .foregroundColor(palette.secondaryText)
+                    }
+                    Spacer()
+                    Toggle("", isOn: Binding(
+                        get: { launchManager.isEnabled },
+                        set: { val in
+                            launchManager.setEnabled(val)
+                        }
+                    ))
+                    .toggleStyle(SwitchToggleStyle(tint: accent))
+                    .labelsHidden()
+                }
+                .padding(8)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(palette.cardBackground)
+                )
+                
+                // Global Shortcut Info
+                HStack(spacing: 8) {
+                    Image(systemName: "command.square.fill")
+                        .font(.system(size: 16))
+                        .foregroundColor(accent)
+                    
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Pintasan Global: ⌘ + ⇧ + I")
+                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                            .foregroundColor(palette.primaryText)
+                        Text("Buka atau tutup Ozill Island dari aplikasi mana saja")
+                            .font(.system(size: 9))
+                            .foregroundColor(palette.secondaryText)
+                    }
+                    Spacer()
+                }
+                .padding(8)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(palette.cardBackground)
+                )
+                
+                // Charger Animation Test Button
+                Button(action: {
+                    vm.collapse()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        sys.triggerChargerBanner()
+                    }
+                }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "bolt.fill")
+                            .foregroundColor(.green)
+                        Text("Uji Coba Animasi Charger (3.5s)")
+                            .font(.system(size: 10.5, weight: .semibold))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+                    .background(Color.green.opacity(0.12))
+                    .foregroundColor(.green)
+                    .cornerRadius(7)
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+        }
     }
     
     @ViewBuilder

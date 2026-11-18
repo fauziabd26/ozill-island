@@ -3,6 +3,7 @@ import SwiftUI
 public struct ExpandedMusicSheet: View {
     @ObservedObject private var musicManager = UniversalMusicManager.shared
     @ObservedObject private var theme = IslandThemeManager.shared
+    @ObservedObject private var volumeService = SystemVolumeService.shared
     
     public init() {}
     
@@ -62,13 +63,21 @@ public struct ExpandedMusicSheet: View {
                         .frame(width: 58, height: 58)
                     
                     if let artUrl = item?.artworkURL {
-                        AsyncImage(url: artUrl) { img in
-                            img.resizable()
-                               .aspectRatio(contentMode: .fill)
-                        } placeholder: {
-                            Image(systemName: item?.source.sfSymbol ?? "music.note")
-                                .font(.system(size: 22))
-                                .foregroundColor(.white)
+                        AsyncImage(url: artUrl) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image.resizable()
+                                    .aspectRatio(contentMode: .fill)
+                            case .failure:
+                                Image(systemName: item?.source.sfSymbol ?? "music.note")
+                                    .font(.system(size: 24, weight: .semibold))
+                                    .foregroundColor(.white)
+                            case .empty:
+                                ProgressView()
+                                    .scaleEffect(0.6)
+                            @unknown default:
+                                EmptyView()
+                            }
                         }
                         .frame(width: 58, height: 58)
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -188,6 +197,54 @@ public struct ExpandedMusicSheet: View {
                 .disabled(!caps.contains(.skipNext))
             }
             .padding(.vertical, 4)
+            
+            // Volume & Quick Mute Slider
+            HStack(spacing: 8) {
+                Button(action: {
+                    volumeService.toggleMute()
+                }) {
+                    Image(systemName: volumeService.isMuted ? "speaker.slash.fill" : (volumeService.volume < 0.33 ? "speaker.fill" : (volumeService.volume < 0.66 ? "speaker.wave.1.fill" : "speaker.wave.2.fill")))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(volumeService.isMuted ? .red : palette.secondaryText)
+                        .frame(width: 24, height: 24)
+                        .background(Circle().fill(palette.cardBackground))
+                }
+                .buttonStyle(PlainButtonStyle())
+                .help(volumeService.isMuted ? "Bunyikan Audio" : "Bisu (Mute)")
+                
+                GeometryReader { vGeo in
+                    ZStack(alignment: .leading) {
+                        Capsule(style: .continuous)
+                            .fill(palette.border)
+                            .frame(height: 5)
+                        
+                        Capsule(style: .continuous)
+                            .fill(volumeService.isMuted ? palette.secondaryText.opacity(0.4) : accent)
+                            .frame(width: max(0, vGeo.size.width * CGFloat(volumeService.volume)), height: 5)
+                    }
+                    .frame(height: 24)
+                    .contentShape(Rectangle())
+                    .gesture(
+                        DragGesture(minimumDistance: 0)
+                            .onChanged { val in
+                                let pct = Double(val.location.x / vGeo.size.width)
+                                volumeService.setVolume(pct)
+                            }
+                    )
+                }
+                .frame(height: 24)
+                
+                Text("\(Int(volumeService.volume * 100))%")
+                    .font(.system(size: 9.5, weight: .bold, design: .monospaced))
+                    .foregroundColor(palette.secondaryText)
+                    .frame(width: 32, alignment: .trailing)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 3)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(palette.cardBackground.opacity(0.5))
+            )
             
             // Detected Sessions Chips (jika ada lebih dari 1 tab/provider)
             let sessions = musicManager.browserProvider.getDetectedSessions()

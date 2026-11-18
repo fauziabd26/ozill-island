@@ -3,7 +3,8 @@ import SwiftUI
 public enum HubTab: String, CaseIterable, Identifiable {
     case prayer = "Shalat"
     case music = "Musik"
-    case system = "Tanggal & Info"
+    case timer = "Timer"
+    case system = "Info"
     
     public var id: String { rawValue }
     
@@ -11,6 +12,7 @@ public enum HubTab: String, CaseIterable, Identifiable {
         switch self {
         case .prayer: return "moon.stars.fill"
         case .music: return "music.note"
+        case .timer: return "timer"
         case .system: return "calendar.badge.clock"
         }
     }
@@ -133,6 +135,8 @@ public struct ExpandedHubSheet: View {
                     PrayerTabContent(vm: vm)
                 case .music:
                     ExpandedMusicSheet()
+                case .timer:
+                    TimerTabContent()
                 case .system:
                     SystemInfoSheet()
                 }

@@ -4,12 +4,15 @@ import SwiftUI
 @MainActor
 public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
+    private var globalKeyMonitor: Any?
+    private var localKeyMonitor: Any?
     
     public func applicationDidFinishLaunching(_ notification: Notification) {
         // Registrasi modul awal ke ModuleRegistry universal
         do {
             try ModuleRegistry.shared.register(PrayerIslandModule.shared)
             try ModuleRegistry.shared.register(MusicIslandModule.shared)
+            try ModuleRegistry.shared.register(TimerIslandModule.shared)
         } catch {
             print("AppDelegate: Gagal registrasi modul awal -", error)
         }
@@ -19,6 +22,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         
         // Setup status item di macOS Menu Bar sebagai kontrol sekunder
         setupStatusItem()
+        
+        // Setup Pintasan Keyboard Global (Cmd + Shift + I)
+        setupGlobalKeyboardShortcut()
         
         // Inisialisasi dan tampilkan floating dynamic island
         IslandWindowController.shared.setupAndShow()
@@ -66,6 +72,46 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     
     @objc private func toggleIsland() {
         IslandWindowController.shared.setupAndShow()
+    }
+    
+    private func setupGlobalKeyboardShortcut() {
+        // Cmd + Shift + I (keyCode 34 adalah 'i' pada keyboard ANSI)
+        globalKeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            if event.modifierFlags.contains([.command, .shift]) && event.keyCode == 34 {
+                Task { @MainActor in
+                    self?.handleGlobalShortcutToggle()
+                }
+            }
+        }
+        
+        localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            if event.modifierFlags.contains([.command, .shift]) && event.keyCode == 34 {
+                Task { @MainActor in
+                    self?.handleGlobalShortcutToggle()
+                }
+                return nil
+            }
+            return event
+        }
+    }
+    
+    @MainActor
+    private func handleGlobalShortcutToggle() {
+        let vm = PrayerIslandViewModel.shared
+        if vm.state == .collapsed {
+            vm.expand()
+        } else {
+            vm.collapse()
+        }
+    }
+    
+    public func applicationWillTerminate(_ notification: Notification) {
+        if let g = globalKeyMonitor {
+            NSEvent.removeMonitor(g)
+        }
+        if let l = localKeyMonitor {
+            NSEvent.removeMonitor(l)
+        }
     }
     
     @objc private func openSettingsAction() {

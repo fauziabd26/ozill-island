@@ -66,3 +66,23 @@ public extension BrowserAdapter {
         !NSRunningApplication.runningApplications(withBundleIdentifier: browserBundleIdentifier).isEmpty
     }
 }
+
+public enum BrowserMediaHelper {
+    public static func extractYouTubeThumbnail(from urlString: String) -> String? {
+        let patterns = [
+            #"[?&]v=([a-zA-Z0-9_-]{11})"#,
+            #"youtu\.be/([a-zA-Z0-9_-]{11})"#,
+            #"youtube\.com/shorts/([a-zA-Z0-9_-]{11})"#,
+            #"youtube\.com/embed/([a-zA-Z0-9_-]{11})"#
+        ]
+        for pattern in patterns {
+            if let regex = try? NSRegularExpression(pattern: pattern),
+               let match = regex.firstMatch(in: urlString, range: NSRange(urlString.startIndex..., in: urlString)),
+               let range = Range(match.range(at: 1), in: urlString) {
+                let videoId = String(urlString[range])
+                return "https://i.ytimg.com/vi/\(videoId)/mqdefault.jpg"
+            }
+        }
+        return nil
+    }
+}

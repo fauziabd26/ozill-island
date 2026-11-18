@@ -17,6 +17,11 @@ public final class SystemInfoService: ObservableObject {
     @Published public private(set) var batteryLevel: Int = 100
     @Published public private(set) var isBatteryCharging: Bool = false
     @Published public private(set) var isACPluggedIn: Bool = true
+    @Published public private(set) var showChargerConnectedBanner: Bool = false
+    @Published public private(set) var isLowBatteryAlert: Bool = false
+    
+    private var previousACPluggedIn: Bool?
+    private var bannerDismissTask: Task<Void, Never>?
     
     private var timer: Timer?
     private let masehiFormatter: DateFormatter
@@ -94,11 +99,43 @@ public final class SystemInfoService: ObservableObject {
             }
             if let current = desc[kIOPSCurrentCapacityKey as String] as? Int,
                let max = desc[kIOPSMaxCapacityKey as String] as? Int {
-                self.batteryLevel = max > 0 ? Int((Double(current) / Double(max)) * 100) : current
-                self.isBatteryCharging = (desc[kIOPSIsChargingKey as String] as? Bool) ?? false
+                let newLevel = max > 0 ? Int((Double(current) / Double(max)) * 100) : current
+                let newCharging = (desc[kIOPSIsChargingKey as String] as? Bool) ?? false
                 let pState = (desc[kIOPSPowerSourceStateKey as String] as? String) ?? ""
-                self.isACPluggedIn = (pState == (kIOPSACPowerValue as String))
+                let newAC = (pState == (kIOPSACPowerValue as String))
+                
+                let wasAC = self.previousACPluggedIn
+                
+                self.batteryLevel = newLevel
+                self.isBatteryCharging = newCharging
+                self.isACPluggedIn = newAC
+                
+                // Pop-up animasi saat charger disambungkan
+                if let prev = wasAC, !prev && newAC {
+                    triggerChargerBanner()
+                }
+                self.previousACPluggedIn = newAC
+                
+                // Peringatan baterai lemah <= 15% jika tidak sedang dicas
+                self.isLowBatteryAlert = (newLevel <= 15 && !newAC)
                 break
+            }
+        }
+    }
+    
+    /// Memicu pop-up animasi pengisian daya selama 3.5 detik
+    public func triggerChargerBanner() {
+        bannerDismissTask?.cancel()
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+            self.showChargerConnectedBanner = true
+        }
+        bannerDismissTask = Task {
+            try? await Task.sleep(nanoseconds: 3_500_000_000) // 3.5 detik
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                    self.showChargerConnectedBanner = false
+                }
             }
         }
     }
