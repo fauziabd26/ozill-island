@@ -59,6 +59,31 @@ public struct ExpandedPrayerSheet: View {
                 }
             }
             
+            // Missed prayer notice if Mac woke up after prayer onset
+            if let missed = vm.scheduler.missedPrayerAlert {
+                HStack(spacing: 8) {
+                    Image(systemName: "bell.badge.fill")
+                        .foregroundColor(.yellow)
+                        .font(.system(size: 11))
+                    Text(missed)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.white.opacity(0.95))
+                    Spacer()
+                    Button(action: {
+                        vm.scheduler.clearMissedPrayerAlert()
+                    }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 12))
+                            .foregroundColor(.white.opacity(0.6))
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Color.yellow.opacity(0.18))
+                .cornerRadius(8)
+            }
+            
             // Audio alert bar if playing
             if vm.audioManager.isPlaying {
                 HStack {

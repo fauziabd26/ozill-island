@@ -2,27 +2,46 @@ import Foundation
 import Combine
 
 public enum IhtiyatiPolicy: String, CaseIterable, Identifiable, Codable {
-    case none = "Tanpa Ihtiyati (Astronomis Murni)"
-    case kemenag = "Rekomendasi Kemenag RI (Kalibrasi SIHAT)"
-    case custom = "Koreksi Manual Kustom"
+    case pureAstronomical = "Astronomis Murni (Offset 0)"
+    case sihatReference = "Kalibrasi Referensi SIHAT (Terverifikasi)"
+    case custom = "Koreksi Manual Pengguna"
     
     public var id: String { rawValue }
     
-    public func baseBuffer(for prayer: PrayerName) -> Int {
+    /// Memberikan base buffer menit berdasarkan kebijakan dan kota tertentu.
+    /// Tidak mengasumsikan seluruh kota di Indonesia memiliki buffer identik.
+    public func baseBuffer(for prayer: PrayerName, cityName: String) -> (buffer: Int, isCalibrated: Bool) {
         switch self {
-        case .none, .custom:
-            return 0
-        case .kemenag:
-            // Berdasarkan audit komparatif terhadap SIHAT Bimas Islam Kemenag RI:
-            // Subuh & Isya menggunakan buffer +2 menit, Dzuhur, Ashar, Maghrib menggunakan buffer +3 menit.
-            // Syuruq (terbit) tidak ditambah buffer (0 menit).
-            switch prayer {
-            case .fajr: return 2
-            case .sunrise: return 0
-            case .dhuhr: return 3
-            case .asr: return 3
-            case .maghrib: return 3
-            case .isha: return 2
+        case .pureAstronomical:
+            return (0, true)
+            
+        case .custom:
+            return (0, true)
+            
+        case .sihatReference:
+            // Kalibrasi referensi spesifik berdasarkan snapshot resmi SIHAT Bimas Islam Kemenag RI
+            if cityName.contains("Jakarta") {
+                switch prayer {
+                case .fajr: return (2, true)
+                case .sunrise: return (0, true)
+                case .dhuhr: return (3, true)
+                case .asr: return (3, true)
+                case .maghrib: return (3, true)
+                case .isha: return (2, true)
+                }
+            } else if cityName.contains("Surabaya") {
+                switch prayer {
+                case .fajr: return (3, true)
+                case .sunrise: return (-3, true)
+                case .dhuhr: return (4, true)
+                case .asr: return (3, true)
+                case .maghrib: return (3, true)
+                case .isha: return (3, true)
+                }
+            } else {
+                // Untuk kota yang belum memiliki kalibrasi referensi khusus, fallback ke 0 (murni astronomis)
+                // dan tandai bahwa kalibrasi khusus kota ini belum tersedia.
+                return (0, false)
             }
         }
     }
@@ -56,10 +75,10 @@ public enum LocationMode: String, Codable {
 public final class PrayerSettings: ObservableObject {
     public static let shared = PrayerSettings()
     
-    private let preferencesKey = "OzillIsland_PrayerPreferences_v2"
-    private let locationModeKey = "OzillIsland_LocationMode"
-    private let selectedCityKey = "OzillIsland_SelectedCity"
-    private let ihtiyatiPolicyKey = "OzillIsland_IhtiyatiPolicy"
+    private let preferencesKey = "OzillIsland_PrayerPreferences_v3"
+    private let locationModeKey = "OzillIsland_LocationMode_v3"
+    private let selectedCityKey = "OzillIsland_SelectedCity_v3"
+    private let ihtiyatiPolicyKey = "OzillIsland_IhtiyatiPolicy_v3"
     
     @Published public var preferences: [PrayerName: PrayerPreference] {
         didSet {
@@ -104,12 +123,12 @@ public final class PrayerSettings: ObservableObject {
             self.selectedCity = CityPreset.defaultCity
         }
         
-        // 3. Load Ihtiyati Policy (Default: .kemenag)
+        // 3. Load Ihtiyati Policy (Default: .pureAstronomical untuk kejujuran ilmiah baseline)
         if let policyRaw = UserDefaults.standard.string(forKey: ihtiyatiPolicyKey),
            let policy = IhtiyatiPolicy(rawValue: policyRaw) {
             self.ihtiyatiPolicy = policy
         } else {
-            self.ihtiyatiPolicy = .kemenag
+            self.ihtiyatiPolicy = .pureAstronomical
         }
         
         // 4. Load Preferences (Default: manualAdjustmentMinutes = 0)
@@ -153,11 +172,24 @@ public final class PrayerSettings: ObservableObject {
         }
     }
     
-    /// Menghitung penyesuaian efektif total (Base Buffer Kebijakan + Koreksi Manual Pengguna)
-    public func effectiveAdjustment(for prayer: PrayerName) -> Int {
-        let base = ihtiyatiPolicy.baseBuffer(for: prayer)
-        let manual = preferences[prayer]?.manualAdjustmentMinutes ?? 0
-        return base + manual
+    /// Menghitung penyesuaian efektif total dengan semantik yang jelas:
+    /// - Jika mode .pureAstronomical: penyesuaian SELALU 0 (koreksi manual diabaikan demi integritas mode falak murni).
+    /// - Jika mode .sihatReference: baseBuffer kota terkait + manualAdjustmentMinutes.
+    /// - Jika mode .custom: murni manualAdjustmentMinutes.
+    public func effectiveAdjustment(for prayer: PrayerName, cityName: String) -> (totalMinutes: Int, isCalibrated: Bool) {
+        switch ihtiyatiPolicy {
+        case .pureAstronomical:
+            return (0, true)
+            
+        case .custom:
+            let manual = preferences[prayer]?.manualAdjustmentMinutes ?? 0
+            return (manual, true)
+            
+        case .sihatReference:
+            let (base, calibrated) = ihtiyatiPolicy.baseBuffer(for: prayer, cityName: cityName)
+            let manual = preferences[prayer]?.manualAdjustmentMinutes ?? 0
+            return (base + manual, calibrated)
+        }
     }
     
     public func update(

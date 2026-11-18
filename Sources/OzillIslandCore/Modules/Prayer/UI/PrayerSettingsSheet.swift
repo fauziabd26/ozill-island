@@ -62,11 +62,29 @@ public struct PrayerSettingsSheet: View {
                             }
                             .pickerStyle(MenuPickerStyle())
                             
-                            Text(settings.ihtiyatiPolicy == .none ? "Waktu dihitung murni secara astronomis tanpa toleransi menit." :
-                                 settings.ihtiyatiPolicy == .kemenag ? "Buffer terkalibrasi SIHAT Kemenag: Subuh/Isya +2m, Dzuhur/Ashar/Maghrib +3m." :
-                                 "Murni mengandalkan koreksi manual yang Anda tentukan di bawah.")
-                                .font(.system(size: 9.5))
-                                .foregroundColor(.cyan.opacity(0.85))
+                            // Penjelasan status kebijakan
+                            Group {
+                                switch settings.ihtiyatiPolicy {
+                                case .pureAstronomical:
+                                    Text("Hisab astronomis murni tanpa ihtiyati (offset 0 menit). Koreksi manual dinonaktifkan.")
+                                        .foregroundColor(.cyan.opacity(0.9))
+                                        
+                                case .sihatReference:
+                                    let (_, isCalibrated) = settings.effectiveAdjustment(for: .fajr, cityName: vm.locationManager.locationName)
+                                    if isCalibrated {
+                                        Text("Kalibrasi referensi SIHAT Kemenag aktif untuk \(vm.locationManager.locationName).")
+                                            .foregroundColor(.green.opacity(0.9))
+                                    } else {
+                                        Text("⚠️ Kalibrasi khusus \(vm.locationManager.locationName) belum tersedia. Menggunakan hisab murni astronomis.")
+                                            .foregroundColor(.yellow.opacity(0.9))
+                                    }
+                                    
+                                case .custom:
+                                    Text("Menggunakan koreksi manual pengguna (-5 s/d +5 menit) dari hisab astronomis.")
+                                        .foregroundColor(.orange.opacity(0.9))
+                                }
+                            }
+                            .font(.system(size: 9.5))
                         }
                         .padding(10)
                         .background(Color.white.opacity(0.05))
@@ -75,8 +93,9 @@ public struct PrayerSettingsSheet: View {
                         // Per-Prayer Config
                         ForEach(PrayerName.fardhuPrayers) { prayer in
                             let pref = settings.preferences[prayer] ?? PrayerPreference()
-                            let totalAdj = settings.effectiveAdjustment(for: prayer)
+                            let (totalAdj, _) = settings.effectiveAdjustment(for: prayer, cityName: vm.locationManager.locationName)
                             let totalAdjSign = totalAdj > 0 ? "+\(totalAdj)" : "\(totalAdj)"
+                            let isPure = settings.ihtiyatiPolicy == .pureAstronomical
                             
                             VStack(spacing: 6) {
                                 HStack {
@@ -90,7 +109,7 @@ public struct PrayerSettingsSheet: View {
                                     
                                     Text("Total koreksi: \(totalAdjSign)m")
                                         .font(.system(size: 10, weight: .medium, design: .monospaced))
-                                        .foregroundColor(.cyan)
+                                        .foregroundColor(isPure ? .gray : .cyan)
                                     
                                     Toggle("", isOn: Binding(
                                         get: { pref.enabled },
@@ -133,18 +152,25 @@ public struct PrayerSettingsSheet: View {
                                     
                                     // Manual Adjustment row (-5 to +5)
                                     HStack {
-                                        Text("Koreksi Manual Pengguna:")
+                                        Text(isPure ? "Koreksi Manual (Terkunci):" : "Koreksi Manual Pengguna:")
                                             .font(.system(size: 11))
-                                            .foregroundColor(.white.opacity(0.7))
+                                            .foregroundColor(isPure ? .white.opacity(0.35) : .white.opacity(0.7))
                                         Spacer()
                                         let manual = pref.manualAdjustmentMinutes
                                         let manualSign = manual > 0 ? "+\(manual)" : "\(manual)"
-                                        Stepper("\(manualSign) menit", value: Binding(
-                                            get: { pref.manualAdjustmentMinutes },
-                                            set: { settings.update(prayer, manualAdjustmentMinutes: $0) }
-                                        ), in: -5...5)
-                                        .font(.system(size: 11, weight: .medium))
-                                        .foregroundColor(.yellow)
+                                        
+                                        if isPure {
+                                            Text("0m (Offset Terkunci)")
+                                                .font(.system(size: 10, weight: .medium))
+                                                .foregroundColor(.gray)
+                                        } else {
+                                            Stepper("\(manualSign) menit", value: Binding(
+                                                get: { pref.manualAdjustmentMinutes },
+                                                set: { settings.update(prayer, manualAdjustmentMinutes: $0) }
+                                            ), in: -5...5)
+                                            .font(.system(size: 11, weight: .medium))
+                                            .foregroundColor(.yellow)
+                                        }
                                     }
                                 }
                             }
@@ -241,7 +267,7 @@ public struct PrayerSettingsSheet: View {
                             }
                             .pickerStyle(MenuPickerStyle())
                             
-                            Text("Mode manual tidak memerlukan Wi-Fi atau izin lokasi macOS.")
+                            Text("Mode manual 100% offline tanpa akses internet maupun Layanan Lokasi.")
                                 .font(.system(size: 10))
                                 .foregroundColor(.white.opacity(0.5))
                                 .padding(.top, 2)
@@ -264,7 +290,7 @@ public struct PrayerSettingsSheet: View {
             ZStack {
                 Color.black.opacity(0.96)
                 RoundedRectangle(cornerRadius: 20)
-                    .stroke(Color.white.opacity(0.18), lineWidth: 1)
+                .stroke(Color.white.opacity(0.18), lineWidth: 1)
             }
         )
         .cornerRadius(20)
