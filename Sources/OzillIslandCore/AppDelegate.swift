@@ -14,6 +14,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             print("AppDelegate: Gagal registrasi modul awal -", error)
         }
         
+        // Mulai pemantauan media otomatis di latar belakang
+        _ = UniversalMusicManager.shared
+        
         // Setup status item di macOS Menu Bar sebagai kontrol sekunder
         setupStatusItem()
         

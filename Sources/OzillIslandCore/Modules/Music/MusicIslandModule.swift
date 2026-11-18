@@ -28,7 +28,7 @@ public final class MusicIslandModule: IslandModule {
         if playbackState.isPlaying {
             return .activeMedia
         }
-        return .standby
+        return .background
     }
     
     /// Sinkronisasi status playback dari provider aktif

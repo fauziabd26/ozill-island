@@ -51,13 +51,23 @@ public final class ModuleRegistry: ObservableObject {
     public func availableModulesSortedByPriority() -> [IslandModule] {
         return registeredModules.values
             .filter { $0.isAvailable }
-            .sorted { $0.currentPriority > $1.currentPriority }
+            .sorted {
+                if $0.currentPriority == $1.currentPriority {
+                    return $0.identifier < $1.identifier
+                }
+                return $0.currentPriority > $1.currentPriority
+            }
     }
     
     /// Mengambil seluruh modul terdaftar diurutkan berdasarkan prioritas.
     public func allModulesSortedByPriority() -> [IslandModule] {
         return registeredModules.values
-            .sorted { $0.currentPriority > $1.currentPriority }
+            .sorted {
+                if $0.currentPriority == $1.currentPriority {
+                    return $0.identifier < $1.identifier
+                }
+                return $0.currentPriority > $1.currentPriority
+            }
     }
     
     /// Menghapus seluruh registrasi (berguna untuk test teardown).
