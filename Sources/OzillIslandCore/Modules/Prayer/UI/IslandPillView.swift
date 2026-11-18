@@ -31,19 +31,11 @@ public struct IslandPillView: View {
                         ))
                 }
             case .expanded:
-                if router.currentMode == .music {
-                    ExpandedMusicSheet()
-                        .transition(.asymmetric(
-                            insertion: .opacity.combined(with: .scale(scale: 0.98)),
-                            removal: .opacity.combined(with: .scale(scale: 0.98))
-                        ))
-                } else {
-                    ExpandedPrayerSheet(vm: vm)
-                        .transition(.asymmetric(
-                            insertion: .opacity.combined(with: .scale(scale: 0.98)),
-                            removal: .opacity.combined(with: .scale(scale: 0.98))
-                        ))
-                }
+                ExpandedHubSheet(vm: vm)
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .scale(scale: 0.98)),
+                        removal: .opacity.combined(with: .scale(scale: 0.98))
+                    ))
             case .settings:
                 PrayerSettingsSheet(vm: vm)
                     .transition(.asymmetric(

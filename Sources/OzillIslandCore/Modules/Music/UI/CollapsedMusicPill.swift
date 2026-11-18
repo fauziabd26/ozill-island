@@ -31,13 +31,13 @@ public struct CollapsedMusicPill: View {
                         .font(.system(size: 11.5, weight: .bold, design: .rounded))
                         .foregroundColor(palette.primaryText)
                         .lineLimit(1)
-                        .frame(maxWidth: 130, alignment: .leading)
+                        .frame(maxWidth: 165, alignment: .leading)
                     
                     Text(item?.artist ?? "Pilih lagu di browser / player")
                         .font(.system(size: 9.5, weight: .regular))
                         .foregroundColor(palette.secondaryText)
                         .lineLimit(1)
-                        .frame(maxWidth: 130, alignment: .leading)
+                        .frame(maxWidth: 165, alignment: .leading)
                 }
             }
             
@@ -73,7 +73,7 @@ public struct CollapsedMusicPill: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 7)
-        .frame(width: 250, height: 38)
+        .frame(width: 290, height: 38)
         .background(
             Capsule(style: .continuous)
                 .fill(palette.background)

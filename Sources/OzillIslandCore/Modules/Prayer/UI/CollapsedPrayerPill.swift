@@ -3,6 +3,7 @@ import SwiftUI
 public struct CollapsedPrayerPill: View {
     @ObservedObject var vm: PrayerIslandViewModel
     @ObservedObject private var theme = IslandThemeManager.shared
+    @ObservedObject private var sys = SystemInfoService.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHovered: Bool = false
     
@@ -14,33 +15,54 @@ public struct CollapsedPrayerPill: View {
         let palette = theme.palette
         let accent = theme.effectiveAccentColor
         
-        HStack(spacing: 12) {
+        HStack(spacing: 8) {
             // Left: SF Symbol + Prayer Name & Time
-            HStack(spacing: 7) {
+            HStack(spacing: 6) {
                 if vm.audioManager.isPlaying {
                     Image(systemName: "speaker.wave.3.fill")
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.system(size: 12, weight: .bold))
                         .foregroundColor(.green)
                 } else {
                     Image(systemName: vm.scheduler.nextPrayerName.sfSymbol)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(accent)
                 }
                 
-                VStack(alignment: .leading, spacing: 1) {
+                VStack(alignment: .leading, spacing: 0.5) {
                     Text(vm.audioManager.isPlaying ? "Adzan \(vm.audioManager.currentPrayerName)" : vm.scheduler.nextPrayerName.rawValue)
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .font(.system(size: 11.5, weight: .semibold, design: .rounded))
                         .foregroundColor(palette.primaryText)
                     
                     if let schedule = vm.scheduler.schedule {
                         Text(schedule.formattedTime(for: vm.scheduler.nextPrayerName, timeZone: vm.locationManager.currentTimeZone))
-                            .font(.system(size: 10, weight: .regular, design: .monospaced))
+                            .font(.system(size: 9.5, weight: .regular, design: .monospaced))
                             .foregroundColor(palette.secondaryText)
                     }
                 }
             }
             
-            Spacer(minLength: 12)
+            Spacer(minLength: 4)
+            
+            // Center Glance: Tanggal & Jam
+            HStack(spacing: 4) {
+                Text(sys.shortDateMasehi)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(palette.secondaryText)
+                Text("•")
+                    .font(.system(size: 7))
+                    .foregroundColor(palette.secondaryText.opacity(0.4))
+                Text(sys.currentTimeString)
+                    .font(.system(size: 10.5, weight: .bold, design: .monospaced))
+                    .foregroundColor(palette.primaryText)
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2.5)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(palette.cardBackground.opacity(0.7))
+            )
+            
+            Spacer(minLength: 4)
             
             // Right: Countdown or Playing Indicator
             if vm.audioManager.isPlaying {
@@ -53,8 +75,8 @@ public struct CollapsedPrayerPill: View {
                         Text("Stop")
                             .font(.system(size: 10, weight: .bold))
                     }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3.5)
                     .background(
                         Capsule(style: .continuous)
                             .fill(Color.red.opacity(0.85))
@@ -63,25 +85,25 @@ public struct CollapsedPrayerPill: View {
                 }
                 .buttonStyle(PlainButtonStyle())
             } else {
-                HStack(spacing: 4) {
+                HStack(spacing: 3) {
                     Image(systemName: "hourglass")
-                        .font(.system(size: 9))
+                        .font(.system(size: 8.5))
                         .foregroundColor(palette.secondaryText)
                     Text(vm.scheduler.timeRemainingString)
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .font(.system(size: 10.5, weight: .bold, design: .monospaced))
                         .foregroundColor(accent)
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3.5)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
                 .background(
                     Capsule(style: .continuous)
                         .fill(palette.cardBackground)
                 )
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 7)
-        .frame(width: 250, height: 38)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .frame(width: 290, height: 38)
         .background(
             Capsule(style: .continuous)
                 .fill(palette.background)
