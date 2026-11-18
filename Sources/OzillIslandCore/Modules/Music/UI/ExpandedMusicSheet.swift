@@ -14,69 +14,9 @@ public struct ExpandedMusicSheet: View {
         let isPlaying = musicManager.playbackState.isPlaying
         let caps = musicManager.activeProvider?.capabilities ?? .standardControls
         
-        VStack(spacing: 12) {
-            // Header
-            HStack(alignment: .center) {
-                HStack(spacing: 6) {
-                    Image(systemName: item?.source.sfSymbol ?? "music.note")
-                        .font(.system(size: 11))
-                        .foregroundColor(accent)
-                    
-                    Text(item?.album ?? item?.source.rawValue ?? "Universal Media Player")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(palette.primaryText)
-                        .lineLimit(1)
-                }
-                
-                Spacer()
-                
-                HStack(spacing: 8) {
-                    // Pin button
-                    Button(action: {
-                        withAnimation(.spring(response: 0.28, dampingFraction: 0.75)) {
-                            musicManager.togglePin()
-                        }
-                    }) {
-                        HStack(spacing: 4) {
-                            Image(systemName: musicManager.isPinnedToMusic ? "pin.fill" : "pin")
-                                .font(.system(size: 10.5, weight: .bold))
-                            if musicManager.isPinnedToMusic {
-                                Text("Pinned")
-                                    .font(.system(size: 9.5, weight: .heavy))
-                            }
-                        }
-                        .foregroundColor(musicManager.isPinnedToMusic ? .white : palette.secondaryText)
-                        .padding(.horizontal, musicManager.isPinnedToMusic ? 9 : 8)
-                        .frame(height: 32)
-                        .background(
-                            Capsule(style: .continuous)
-                                .fill(musicManager.isPinnedToMusic ? accent : palette.cardBackground)
-                        )
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                    .help(musicManager.isPinnedToMusic ? "Lepas Pin Musik (Kembali ke Otomatis)" : "Pin Musik ke Island (Agar Tidak Hilang)")
-                    
-                    // Collapse button
-                    Button(action: {
-                        PrayerIslandViewModel.shared.collapse()
-                    }) {
-                        Image(systemName: "chevron.up")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundColor(palette.primaryText)
-                            .frame(width: 32, height: 32)
-                            .background(
-                                Circle()
-                                    .fill(palette.cardBackground)
-                            )
-                            .contentShape(Circle())
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                    .help("Tutup Island")
-                }
-            }
-            
+        VStack(spacing: 10) {
             // Media Card (Thumbnail / Artwork & Info)
-            HStack(spacing: 14) {
+            HStack(spacing: 12) {
                 // Artwork Box
                 ZStack {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -87,7 +27,7 @@ public struct ExpandedMusicSheet: View {
                                 endPoint: .bottomTrailing
                             )
                         )
-                        .frame(width: 58, height: 58)
+                        .frame(width: 52, height: 52)
                     
                     if let artUrl = item?.artworkURL {
                         AsyncImage(url: artUrl) { phase in
@@ -97,7 +37,7 @@ public struct ExpandedMusicSheet: View {
                                     .aspectRatio(contentMode: .fill)
                             case .failure:
                                 Image(systemName: item?.source.sfSymbol ?? "music.note")
-                                    .font(.system(size: 24, weight: .semibold))
+                                    .font(.system(size: 22, weight: .semibold))
                                     .foregroundColor(.white)
                             case .empty:
                                 ProgressView()
@@ -106,44 +46,58 @@ public struct ExpandedMusicSheet: View {
                                 EmptyView()
                             }
                         }
-                        .frame(width: 58, height: 58)
+                        .frame(width: 52, height: 52)
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     } else {
                         Image(systemName: item?.source.sfSymbol ?? "music.note")
-                            .font(.system(size: 24, weight: .semibold))
+                            .font(.system(size: 22, weight: .semibold))
                             .foregroundColor(.white)
                     }
                 }
                 
                 // Title & Artist
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 2.5) {
                     Text(item?.title ?? "Tidak Ada Trek Aktif")
-                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
                         .foregroundColor(palette.primaryText)
                         .lineLimit(2)
                     
-                    Text(item?.artist ?? "Buka YouTube, Spotify, atau Apple Music")
-                        .font(.system(size: 11, weight: .medium))
+                    Text(item?.artist ?? "Putar video di YouTube, Spotify, atau Apple Music")
+                        .font(.system(size: 10.5, weight: .medium))
                         .foregroundColor(palette.secondaryText)
                         .lineLimit(1)
                     
-                    if let src = item?.source {
-                        Text(src.rawValue)
-                            .font(.system(size: 9, weight: .bold))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(
-                                Capsule(style: .continuous)
-                                    .fill(accent.opacity(0.18))
-                            )
-                            .foregroundColor(accent)
-                            .padding(.top, 2)
+                    HStack(spacing: 6) {
+                        if let src = item?.source {
+                            Text(src.rawValue)
+                                .font(.system(size: 8.5, weight: .bold))
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 1.5)
+                                .background(
+                                    Capsule(style: .continuous)
+                                        .fill(accent.opacity(0.18))
+                                )
+                                .foregroundColor(accent)
+                        }
+                        
+                        if musicManager.isPinnedToMusic {
+                            HStack(spacing: 2) {
+                                Image(systemName: "pin.fill")
+                                    .font(.system(size: 7.5))
+                                Text("PINNED")
+                                    .font(.system(size: 8, weight: .heavy))
+                            }
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1.5)
+                            .background(Capsule(style: .continuous).fill(Color.orange.opacity(0.2)))
+                            .foregroundColor(.orange)
+                        }
                     }
                 }
                 
                 Spacer()
             }
-            .padding(12)
+            .padding(10)
             .background(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .fill(palette.cardBackground)
@@ -151,79 +105,70 @@ public struct ExpandedMusicSheet: View {
             
             // Progress Bar
             if let it = item, it.duration > 0 {
-                VStack(spacing: 4) {
+                VStack(spacing: 3) {
                     GeometryReader { geo in
                         ZStack(alignment: .leading) {
                             Capsule(style: .continuous)
                                 .fill(palette.border)
-                                .frame(height: 4)
+                                .frame(height: 3.5)
                             
                             Capsule(style: .continuous)
                                 .fill(accent)
-                                .frame(width: max(0, geo.size.width * CGFloat(it.progress)), height: 4)
+                                .frame(width: max(0, geo.size.width * CGFloat(it.progress)), height: 3.5)
                         }
                     }
-                    .frame(height: 4)
+                    .frame(height: 3.5)
                     
                     HStack {
                         Text(it.formattedPosition)
-                            .font(.system(size: 9.5, design: .monospaced))
+                            .font(.system(size: 9, design: .monospaced))
                             .foregroundColor(palette.secondaryText)
                         Spacer()
                         Text(it.formattedDuration)
-                            .font(.system(size: 9.5, design: .monospaced))
+                            .font(.system(size: 9, design: .monospaced))
                             .foregroundColor(palette.secondaryText)
                     }
                 }
-                .padding(.horizontal, 4)
+                .padding(.horizontal, 2)
             }
             
             // Controls (Previous, Play/Pause, Next)
             HStack(spacing: 24) {
-                // Previous button
                 Button(action: {
-                    Task {
-                        await musicManager.previous()
-                    }
+                    Task { await musicManager.previous() }
                 }) {
                     Image(systemName: "backward.fill")
-                        .font(.system(size: 16))
+                        .font(.system(size: 15))
                         .foregroundColor(caps.contains(.skipPrevious) ? palette.primaryText : palette.secondaryText.opacity(0.3))
                 }
                 .buttonStyle(PlainButtonStyle())
                 .disabled(!caps.contains(.skipPrevious))
                 
-                // Play / Pause button
                 Button(action: {
-                    Task {
-                        await musicManager.playPause()
-                    }
+                    Task { await musicManager.playPause() }
                 }) {
                     ZStack {
                         Circle()
                             .fill(accent)
-                            .frame(width: 44, height: 44)
+                            .frame(width: 40, height: 40)
                         Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                            .font(.system(size: 18, weight: .bold))
+                            .font(.system(size: 16, weight: .bold))
                             .foregroundColor(.white)
                     }
                 }
                 .buttonStyle(PlainButtonStyle())
                 
-                // Next button
                 Button(action: {
-                    Task {
-                        await musicManager.next()
-                    }
+                    Task { await musicManager.next() }
                 }) {
                     Image(systemName: "forward.fill")
-                        .font(.system(size: 16))
+                        .font(.system(size: 15))
                         .foregroundColor(caps.contains(.skipNext) ? palette.primaryText : palette.secondaryText.opacity(0.3))
                 }
                 .buttonStyle(PlainButtonStyle())
                 .disabled(!caps.contains(.skipNext))
             }
-            .padding(.vertical, 4)
+            .padding(.vertical, 2)
             
             // Volume & Quick Mute Slider
             HStack(spacing: 8) {
@@ -273,32 +218,30 @@ public struct ExpandedMusicSheet: View {
                     .fill(palette.cardBackground.opacity(0.5))
             )
             
-            // Detected Sessions Chips (jika ada lebih dari 1 tab/provider)
+            // Detected Sessions Chips
             let sessions = musicManager.browserProvider.getDetectedSessions()
             if sessions.count > 1 {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Tab Media Terdeteksi:")
-                        .font(.system(size: 9.5, weight: .semibold))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Pilih Tab Media:")
+                        .font(.system(size: 9, weight: .semibold))
                         .foregroundColor(palette.secondaryText)
                     
                     ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 6) {
+                        HStack(spacing: 5) {
                             ForEach(sessions, id: \.id) { session in
                                 Button(action: {
                                     musicManager.browserProvider.selectSession(id: session.id)
-                                    Task {
-                                        await musicManager.pollActiveMedia()
-                                    }
+                                    Task { await musicManager.pollActiveMedia() }
                                 }) {
                                     HStack(spacing: 4) {
                                         Image(systemName: session.isYouTubeMusic ? "play.rectangle.fill" : "globe")
-                                            .font(.system(size: 8.5))
+                                            .font(.system(size: 8))
                                         Text(session.nowPlaying.title)
-                                            .font(.system(size: 9.5, weight: .medium))
+                                            .font(.system(size: 9, weight: .medium))
                                             .lineLimit(1)
                                     }
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
+                                    .padding(.horizontal, 7)
+                                    .padding(.vertical, 3.5)
                                     .background(
                                         Capsule(style: .continuous)
                                             .fill(session.nowPlaying.title == item?.title ? accent.opacity(0.22) : palette.cardBackground)
@@ -310,33 +253,10 @@ public struct ExpandedMusicSheet: View {
                         }
                     }
                 }
-                .padding(.top, 2)
-            }
-            
-            // Footer Info
-            HStack {
-                Text("Universal Media Controller • Apple Music, Spotify, YouTube Browser")
-                    .font(.system(size: 9))
-                    .foregroundColor(palette.secondaryText.opacity(0.7))
-                Spacer()
-                if let prov = musicManager.activeProvider {
-                    Text(prov.displayName)
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundColor(palette.secondaryText.opacity(0.7))
-                }
+                .padding(.top, 1)
             }
         }
-        .padding(14)
-        .frame(width: 380)
-        .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(palette.background)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(palette.border, lineWidth: 1.0)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .shadow(color: palette.shadowColor, radius: 20, x: 0, y: 10)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 4)
     }
 }

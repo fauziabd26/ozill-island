@@ -70,6 +70,32 @@ public struct ExpandedHubSheet: View {
                 Spacer()
                 
                 HStack(spacing: 8) {
+                    // Pin Music Button
+                    Button(action: {
+                        withAnimation(.spring(response: 0.28, dampingFraction: 0.75)) {
+                            musicManager.togglePin()
+                        }
+                    }) {
+                        HStack(spacing: 3) {
+                            Image(systemName: musicManager.isPinnedToMusic ? "pin.fill" : "pin")
+                                .font(.system(size: 11, weight: .bold))
+                            if musicManager.isPinnedToMusic {
+                                Text("PIN")
+                                    .font(.system(size: 8.5, weight: .heavy))
+                            }
+                        }
+                        .foregroundColor(musicManager.isPinnedToMusic ? .white : palette.secondaryText)
+                        .padding(.horizontal, musicManager.isPinnedToMusic ? 7 : 0)
+                        .frame(width: musicManager.isPinnedToMusic ? nil : 30, height: 30)
+                        .background(
+                            musicManager.isPinnedToMusic ?
+                            AnyView(Capsule(style: .continuous).fill(accent)) :
+                            AnyView(Circle().fill(palette.cardBackground))
+                        )
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .help(musicManager.isPinnedToMusic ? "Lepas Pin Musik (Kembali ke Otomatis)" : "Pin Musik ke Island (Kunci agar tidak hilang)")
+                    
                     Button(action: {
                         vm.openSettings()
                     }) {
@@ -146,7 +172,7 @@ public struct ExpandedHubSheet: View {
             Spacer(minLength: 0)
         }
         .padding(14)
-        .frame(width: 380, height: 385)
+        .frame(width: 380, height: 410)
         .background(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .fill(palette.background)

@@ -119,10 +119,10 @@ public final class IslandWindowController: NSObject {
             height = 48
         case .expanded:
             width = 390
-            height = 405
+            height = 425
         case .settings:
             width = 390
-            height = 410
+            height = 425
         }
         
         let targetFrame = calculateFrame(width: width, height: height)
