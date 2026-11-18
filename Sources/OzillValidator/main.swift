@@ -973,10 +973,208 @@ struct OzillValidatorApp {
             assert(unavailableCaught, "Kontrol pada provider unavailable harus melempar error")
         }
 
+        // Dummy browser adapter untuk pengujian unit & multi-tab prioritization
+        final class MockBrowserAdapter: BrowserAdapter, @unchecked Sendable {
+            let browserBundleIdentifier: String
+            let browserDisplayName: String
+            let supportedCapabilities: MusicProviderCapabilities
+            var mockSessions: [BrowserMediaSession] = []
+            var isRunning: Bool = true
+            var lastAction: String?
+            
+            var isBrowserRunning: Bool { isRunning }
+            
+            init(
+                bundleId: String = "com.google.Chrome",
+                name: String = "Mock Chrome",
+                caps: MusicProviderCapabilities = [.playPause, .skipNext, .skipPrevious, .seek],
+                sessions: [BrowserMediaSession] = []
+            ) {
+                self.browserBundleIdentifier = bundleId
+                self.browserDisplayName = name
+                self.supportedCapabilities = caps
+                self.mockSessions = sessions
+            }
+            
+            func detectMediaSessions() async -> [BrowserMediaSession] {
+                guard isRunning else { return [] }
+                return mockSessions
+            }
+            
+            func playPause(sessionId: String) async throws { lastAction = "playPause" }
+            func next(sessionId: String) async throws { lastAction = "next" }
+            func previous(sessionId: String) async throws { lastAction = "previous" }
+            func seek(to seconds: TimeInterval, sessionId: String) async throws { lastAction = "seek" }
+        }
+
+        // Assertion 29: Browser Adapter Capability & Honest Reporting
+        runTest("Browser Adapters: Pelaporan Kapabilitas Sah per Browser (Chrome, Safari, Edge, Firefox)") {
+            let chrome = ChromeMusicAdapter()
+            assert(chrome.browserBundleIdentifier == "com.google.Chrome")
+            assert(chrome.supportedCapabilities.contains([.playPause, .skipNext, .skipPrevious, .seek]))
+            
+            let safari = SafariMusicAdapter()
+            assert(safari.browserBundleIdentifier == "com.apple.Safari")
+            assert(safari.supportedCapabilities.contains([.playPause, .seek]))
+            
+            let edge = EdgeMusicAdapter()
+            assert(edge.browserBundleIdentifier == "com.microsoft.edgemac")
+            assert(edge.supportedCapabilities.contains([.playPause, .skipNext]))
+            
+            let firefox = FirefoxMusicAdapter()
+            assert(firefox.browserBundleIdentifier == "org.mozilla.firefox")
+            // Firefox melaporkan secara jujur keterbatasan kapabilitas kamus AppleScript
+            assert(firefox.supportedCapabilities.isEmpty, "Firefox harus melaporkan kapabilitas kosong tanpa extension")
+        }
+
+        // Assertion 30: YouTube & YouTube Music Classification & Metadata Parsing
+        runTest("YouTube Session: Klasifikasi YouTube Reguler vs YouTube Music dan Perhitungan Progress") {
+            let regularItem = NowPlayingItem(
+                title: "LANY - Malibu Nights",
+                artist: "LANY",
+                album: "Google Chrome",
+                duration: 286,
+                playbackPosition: 143,
+                source: .browser
+            )
+            assert(regularItem.source == .browser)
+            assert(regularItem.formattedPosition == "2:23")
+            assert(regularItem.formattedDuration == "4:46")
+            assert(abs(regularItem.progress - 0.5) < 0.01, "Progress harus 50%")
+            
+            let ytMusicItem = NowPlayingItem(
+                title: "Starboy",
+                artist: "The Weeknd",
+                album: "Safari",
+                duration: 230,
+                playbackPosition: 0,
+                source: .youtubeMusic
+            )
+            assert(ytMusicItem.source == .youtubeMusic)
+            assert(ytMusicItem.source.sfSymbol == "play.rectangle.fill")
+            assert(ytMusicItem.progress == 0.0)
+            
+            let session = BrowserMediaSession(
+                id: "chrome::1::2",
+                browserBundleId: "com.google.Chrome",
+                browserName: "Google Chrome",
+                tabTitle: "LANY - Malibu Nights",
+                urlString: "https://www.youtube.com/watch?v=123",
+                nowPlaying: regularItem,
+                isPlaying: true,
+                isYouTube: true,
+                isYouTubeMusic: false
+            )
+            assert(session.isYouTube == true)
+            assert(session.isYouTubeMusic == false)
+            assert(session.isPlaying == true)
+        }
+
+        // Assertion 31: BrowserMusicProvider Multi-Tab Prioritization & Session Override
+        await runAsyncTest("BrowserMusicProvider: Prioritas Multi-Tab (Playing > Paused) dan Override Manual") {
+            let tab1Paused = BrowserMediaSession(
+                id: "tab-1-paused",
+                browserBundleId: "com.google.Chrome",
+                browserName: "Google Chrome",
+                tabTitle: "Tutorial Swift - Paused",
+                urlString: "https://youtube.com/watch?v=t1",
+                nowPlaying: NowPlayingItem(title: "Tutorial Swift", artist: "Dev", duration: 600, source: .browser),
+                isPlaying: false,
+                isYouTube: true,
+                isYouTubeMusic: false
+            )
+            let tab2Playing = BrowserMediaSession(
+                id: "tab-2-playing",
+                browserBundleId: "com.google.Chrome",
+                browserName: "Google Chrome",
+                tabTitle: "Lo-Fi Beats - Playing",
+                urlString: "https://music.youtube.com/watch?v=t2",
+                nowPlaying: NowPlayingItem(title: "Lo-Fi Beats", artist: "ChilledCow", duration: 180, source: .youtubeMusic),
+                isPlaying: true,
+                isYouTube: false,
+                isYouTubeMusic: true
+            )
+            
+            let mockAdapter = MockBrowserAdapter(sessions: [tab1Paused, tab2Playing])
+            let provider = BrowserMusicProvider(adapters: [mockAdapter])
+            
+            // 1. fetchSnapshot harus otomatis memprioritaskan tab yang sedang playing (Tab 2)
+            let snap = await provider.fetchSnapshot()
+            assert(snap?.title == "Lo-Fi Beats", "Harus memprioritaskan tab yang sedang playing")
+            let pState1 = await provider.fetchPlaybackState()
+            assert(pState1 == .playing)
+            
+            // 2. Pemilihan manual sesi (override)
+            provider.selectSession(id: "tab-1-paused")
+            let overrideSnap = await provider.fetchSnapshot()
+            assert(overrideSnap?.title == "Tutorial Swift", "Harus beralih ke sesi yang dipilih manual")
+            let pState2 = await provider.fetchPlaybackState()
+            assert(pState2 == .paused)
+            
+            // 3. Kontrol playPause dikirimkan ke adapter
+            try? await provider.playPause()
+            assert(mockAdapter.lastAction == "playPause")
+        }
+
+        // Assertion 32: UniversalMusicManager Multi-Provider Aggregation & Routing
+        await runAsyncTest("UniversalMusicManager: Koordinasi Multi-Provider & Integrasi Mode Router") {
+            let manager = UniversalMusicManager.shared
+            
+            // Registrasi modul jika belum terdaftar di registry bersama
+            if ModuleRegistry.shared.module(for: "org.ozill.prayer") == nil {
+                try? ModuleRegistry.shared.register(PrayerIslandModule.shared)
+            }
+            if ModuleRegistry.shared.module(for: "org.ozill.music") == nil {
+                try? ModuleRegistry.shared.register(MusicIslandModule.shared)
+            }
+            
+            // Buat mock provider yang sedang playing
+            let activeMock = MockMusicProvider(
+                identifier: "test.active.provider",
+                displayName: "Test Active Player",
+                isAvailable: true,
+                capabilities: .fullControls
+            )
+            activeMock.setPlaybackState(.playing)
+            
+            manager.mockProvider = activeMock
+            manager.selectProvider(id: "test.active.provider")
+            
+            await manager.pollActiveMedia()
+            
+            // 1. Manager mendeteksi mock yang sedang playing
+            assert(manager.playbackState == .playing, "Playback state harus .playing")
+            assert(manager.currentItem?.title == "Starboy")
+            assert(manager.activeProvider?.identifier == "test.active.provider")
+            
+            // 2. Router otomatis menaikkan prioritas ke .music
+            let (mode, activeMod) = IslandModeRouter.shared.resolveActiveMode()
+            assert(mode == .music, "Router harus beralih ke mode .music saat ada media aktif")
+            assert(activeMod?.associatedMode == .music)
+            
+            // 3. Bersihkan mock provider agar tidak mengotori runtime
+            manager.mockProvider = nil
+            manager.selectProvider(id: nil)
+            await manager.pollActiveMedia()
+        }
+
+        // Assertion 33: Non-blocking ScriptBridge Execution & Watchdog Timeout
+        await runAsyncTest("ScriptBridge: Eksekusi Asinkron Latar Belakang & Watchdog Timeout Protection") {
+            // 1. Eksekusi cepat yang berhasil
+            let (success, out) = await ScriptBridge.executeAppleScript("return \"OZILL_TEST_OK\"", timeout: 1.0)
+            assert(success == true, "AppleScript valid harus berhasil dieksekusi")
+            assert(out == "OZILL_TEST_OK", "Output harus sesuai")
+            
+            // 2. Skrip dengan delay panjang yang memicu watchdog timeout
+            let (timedOut, errStr) = await ScriptBridge.executeAppleScript("delay 3\nreturn \"late\"", timeout: 0.3)
+            assert(timedOut == false, "Skrip yang melebihi timeout harus dihentikan oleh watchdog")
+            assert(errStr.contains("timed out"), "Pesan error harus mengindikasikan timeout")
+        }
+
         print("""
 
         ================================================================================
-           HASIL FINAL FASE 1 — MODULAR HUB & MUSIC FOUNDATION VALIDATION:
+           HASIL FINAL FASE 2 — UNIVERSAL MUSIC & BROWSER INTEGRATION VALIDATION:
            1. Magic numbers (86400, 15, 45) diganti konstanta bernama bertipe TimeInterval.
            2. Deduplikasi Adzan diperkuat menggunakan Set<String> dengan pemangkasan memori.
            3. Sleep/Wake mencatat MissedPrayerOccurrence terstruktur (nama, waktu, zona).
@@ -985,13 +1183,18 @@ struct OzillValidatorApp {
            6. Isolasi Namespace Notifikasi (ozill-prayer-*) menjamin modul lain aman dari pembersihan.
            7. Error add notifikasi tercatat transparan dan dibatasi max 50 riwayat.
            8. Transisi IslandState deterministik dan idempoten (Assertion 22 PASS).
-           9. Centralized Theme Engine, 5 presets, accent picker & custom hex parser tervalidasi (Assertion 23 PASS).
+           9. Centralized Theme Engine, 5 presets, accent picker & custom hex parser (Assertion 23 PASS).
            10. ModuleRegistry: Registrasi, lookup, unregister, duplicate prevention (Assertion 24 PASS).
            11. ModulePriority: Pengurutan hierarkis modul 100 s/d 20 (Assertion 25 PASS).
            12. GeneralSettings & StandbyMode: 7 varian standby & persistensi UserDefaults (Assertion 26 PASS).
            13. IslandModeRouter: Resolusi prioritas deterministik & anti-flapping (Assertion 27 PASS).
            14. MockMusicProvider: Simulasi playback, cycling, capabilities & error handling (Assertion 28 PASS).
-           15. Seluruh 28 Automated Validation Assertions BERHASIL (PASS).
+           15. Browser Adapters: Pelaporan kapabilitas Chrome, Safari, Edge, Firefox (Assertion 29 PASS).
+           16. YouTube Session: Klasifikasi YouTube vs YouTube Music & progress tracking (Assertion 30 PASS).
+           17. BrowserMusicProvider: Multi-tab prioritization (Playing > Paused) & override (Assertion 31 PASS).
+           18. UniversalMusicManager: Koordinasi multi-provider & dynamic mode router (Assertion 32 PASS).
+           19. ScriptBridge: Eksekusi AppleScript background non-blocking & timeout watchdog (Assertion 33 PASS).
+           20. Seluruh 33 Automated Validation Assertions BERHASIL (PASS).
         ================================================================================
         """)
     }

@@ -1,0 +1,63 @@
+import Foundation
+
+/// Bridge eksekusi skrip macOS (AppleScript / JXA) asinkron dan terisolasi
+/// dengan batas timeout ketat (1.5s) agar tidak pernah memblokir UI atau MainActor.
+public enum ScriptBridge {
+    public static func executeAppleScript(_ script: String, timeout: TimeInterval = 1.5) async -> (success: Bool, output: String) {
+        return await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let process = Process()
+                process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+                process.arguments = ["-e", script]
+                
+                let outputPipe = Pipe()
+                let errorPipe = Pipe()
+                process.standardOutput = outputPipe
+                process.standardError = errorPipe
+                
+                var hasResumed = false
+                let lock = NSLock()
+                
+                func resumeOnce(success: Bool, output: String) {
+                    lock.lock()
+                    defer { lock.unlock() }
+                    if !hasResumed {
+                        hasResumed = true
+                        continuation.resume(returning: (success, output))
+                    }
+                }
+                
+                // Watchdog timer untuk timeout
+                let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global())
+                timer.schedule(deadline: .now() + timeout)
+                timer.setEventHandler {
+                    if process.isRunning {
+                        process.terminate()
+                    }
+                    resumeOnce(success: false, output: "Execution timed out (\(timeout)s)")
+                }
+                timer.resume()
+                
+                do {
+                    try process.run()
+                    process.waitUntilExit()
+                    timer.cancel()
+                    
+                    let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
+                    let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    
+                    if process.terminationStatus == 0 {
+                        resumeOnce(success: true, output: output)
+                    } else {
+                        let errData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+                        let errStr = String(data: errData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                        resumeOnce(success: false, output: errStr.isEmpty ? output : errStr)
+                    }
+                } catch {
+                    timer.cancel()
+                    resumeOnce(success: false, output: error.localizedDescription)
+                }
+            }
+        }
+    }
+}

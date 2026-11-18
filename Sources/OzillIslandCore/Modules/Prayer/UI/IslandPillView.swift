@@ -3,6 +3,7 @@ import SwiftUI
 @MainActor
 public struct IslandPillView: View {
     @ObservedObject private var vm: PrayerIslandViewModel
+    @ObservedObject private var router = IslandModeRouter.shared
     
     public init(vm: PrayerIslandViewModel) {
         self.vm = vm
@@ -16,13 +17,22 @@ public struct IslandPillView: View {
         Group {
             switch vm.state {
             case .collapsed:
-                CollapsedPrayerPill(vm: vm)
+                if router.currentMode == .music {
+                    CollapsedMusicPill()
+                } else {
+                    CollapsedPrayerPill(vm: vm)
+                }
             case .expanded:
-                ExpandedPrayerSheet(vm: vm)
+                if router.currentMode == .music {
+                    ExpandedMusicSheet()
+                } else {
+                    ExpandedPrayerSheet(vm: vm)
+                }
             case .settings:
                 PrayerSettingsSheet(vm: vm)
             }
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.82), value: vm.state)
+        .animation(.spring(response: 0.35, dampingFraction: 0.82), value: router.currentMode)
     }
 }
