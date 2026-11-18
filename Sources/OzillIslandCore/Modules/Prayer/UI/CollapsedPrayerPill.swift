@@ -55,9 +55,11 @@ public struct CollapsedPrayerPill: View {
                     }
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(Color.red.opacity(0.85))
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(Color.red.opacity(0.85))
+                    )
                     .foregroundColor(.white)
-                    .cornerRadius(10)
                 }
                 .buttonStyle(PlainButtonStyle())
             } else {
@@ -71,25 +73,28 @@ public struct CollapsedPrayerPill: View {
                 }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3.5)
-                .background(palette.cardBackground)
-                .cornerRadius(10)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(palette.cardBackground)
+                )
             }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 7)
         .frame(width: 250, height: 38)
         .background(
-            ZStack {
-                palette.background
-                RoundedRectangle(cornerRadius: 19)
-                    .stroke(
-                        isHovered ? palette.hoverBorder : palette.border,
-                        lineWidth: isHovered ? 1.4 : 1.0
-                    )
-            }
+            Capsule(style: .continuous)
+                .fill(palette.background)
         )
-        .clipShape(Capsule())
-        .contentShape(Capsule())
+        .overlay(
+            Capsule(style: .continuous)
+                .stroke(
+                    isHovered ? palette.hoverBorder : palette.border,
+                    lineWidth: isHovered ? 1.4 : 1.0
+                )
+        )
+        .clipShape(Capsule(style: .continuous))
+        .contentShape(Capsule(style: .continuous))
         .scaleEffect(isHovered && !reduceMotion ? 1.03 : 1.0)
         .shadow(
             color: isHovered ? accent.opacity(0.35) : palette.shadowColor,

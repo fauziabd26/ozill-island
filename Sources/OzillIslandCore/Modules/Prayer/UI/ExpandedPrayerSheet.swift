@@ -46,8 +46,10 @@ public struct ExpandedPrayerSheet: View {
                             .font(.system(size: 13, weight: .medium))
                             .foregroundColor(palette.primaryText)
                             .frame(width: 32, height: 32)
-                            .background(palette.cardBackground)
-                            .clipShape(Circle())
+                            .background(
+                                Circle()
+                                    .fill(palette.cardBackground)
+                            )
                             .contentShape(Circle())
                     }
                     .buttonStyle(PlainButtonStyle())
@@ -60,8 +62,10 @@ public struct ExpandedPrayerSheet: View {
                             .font(.system(size: 12, weight: .bold))
                             .foregroundColor(palette.primaryText)
                             .frame(width: 32, height: 32)
-                            .background(palette.cardBackground)
-                            .clipShape(Circle())
+                            .background(
+                                Circle()
+                                    .fill(palette.cardBackground)
+                            )
                             .contentShape(Circle())
                     }
                     .buttonStyle(PlainButtonStyle())
@@ -90,8 +94,10 @@ public struct ExpandedPrayerSheet: View {
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
-                .background(Color.yellow.opacity(0.18))
-                .cornerRadius(8)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color.yellow.opacity(0.18))
+                )
             }
             
             // Audio alert bar if playing
@@ -109,15 +115,19 @@ public struct ExpandedPrayerSheet: View {
                     .font(.system(size: 10, weight: .bold))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
-                    .background(Color.red.opacity(0.85))
+                    .background(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(Color.red.opacity(0.85))
+                    )
                     .foregroundColor(.white)
-                    .cornerRadius(6)
                     .buttonStyle(PlainButtonStyle())
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
-                .background(Color.green.opacity(0.15))
-                .cornerRadius(8)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color.green.opacity(0.15))
+                )
             }
             
             // Hero: Next Prayer Card
@@ -157,8 +167,10 @@ public struct ExpandedPrayerSheet: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .background(palette.cardBackground)
-            .cornerRadius(12)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(palette.cardBackground)
+            )
             
             // Full Prayer List (6 times including Syuruq)
             if let schedule = vm.scheduler.schedule {
@@ -187,9 +199,11 @@ public struct ExpandedPrayerSheet: View {
                                     .font(.system(size: 9, weight: .semibold))
                                     .padding(.horizontal, 6)
                                     .padding(.vertical, 2)
-                                    .background(accent.opacity(0.18))
+                                    .background(
+                                        Capsule(style: .continuous)
+                                            .fill(accent.opacity(0.18))
+                                    )
                                     .foregroundColor(accent)
-                                    .cornerRadius(4)
                             }
                             
                             Text(schedule.formattedTime(for: item.prayer, timeZone: vm.locationManager.currentTimeZone))
@@ -198,8 +212,12 @@ public struct ExpandedPrayerSheet: View {
                         }
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4.5)
-                        .background(isNext ? palette.cardBackground : Color.clear)
-                        .cornerRadius(6)
+                        .background(
+                            isNext ?
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(palette.cardBackground) :
+                            nil
+                        )
                     }
                 }
             }
@@ -218,13 +236,14 @@ public struct ExpandedPrayerSheet: View {
         .padding(14)
         .frame(width: 380)
         .background(
-            ZStack {
-                palette.background
-                RoundedRectangle(cornerRadius: 20)
-                    .stroke(palette.border, lineWidth: 1)
-            }
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(palette.background)
         )
-        .cornerRadius(20)
-        .shadow(color: palette.shadowColor, radius: 16, x: 0, y: 8)
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(palette.border, lineWidth: 1.0)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .shadow(color: palette.shadowColor, radius: 20, x: 0, y: 10)
     }
 }

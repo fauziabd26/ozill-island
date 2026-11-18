@@ -590,10 +590,13 @@ struct OzillValidatorApp {
             )
             assert(!requests.isEmpty, "Harus ada request notifikasi yang dibentuk")
             
-            // Jalankan scheduleAll dengan failing center
+            let tomorrowDate = cal.date(byAdding: .day, value: 1, to: Date())!
+            let tomorrowSched = calculator.calculate(latitude: -6.2088, longitude: 106.8456, date: tomorrowDate, timeZone: tzJakarta, adjustments: [:])
+            
+            // Jalankan scheduleAll dengan failing center (menyertakan tomorrowSchedule agar selalu ada jadwal di masa depan)
             await failingManager.scheduleAll(
                 todaySchedule: testSched,
-                tomorrowSchedule: nil,
+                tomorrowSchedule: tomorrowSched,
                 preferences: PrayerSettings.shared.preferences,
                 timeZone: tzJakarta
             )
@@ -645,9 +648,12 @@ struct OzillValidatorApp {
                 fatalError("Gagal menghitung testSched")
             }
             
+            let tomorrowDate = calTest.date(byAdding: .day, value: 1, to: Date())!
+            let tomorrowSched = calculator.calculate(latitude: -6.2088, longitude: 106.8456, date: tomorrowDate, timeZone: tzJakarta, adjustments: [:])
+            
             await manager.scheduleAll(
                 todaySchedule: testSched,
-                tomorrowSchedule: nil,
+                tomorrowSchedule: tomorrowSched,
                 preferences: PrayerSettings.shared.preferences,
                 timeZone: tzJakarta
             )

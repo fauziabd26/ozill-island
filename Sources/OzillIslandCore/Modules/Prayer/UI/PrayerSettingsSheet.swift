@@ -71,14 +71,15 @@ public struct PrayerSettingsSheet: View {
         .padding(14)
         .frame(width: 380)
         .background(
-            ZStack {
-                palette.background
-                RoundedRectangle(cornerRadius: 20)
-                    .stroke(palette.border, lineWidth: 1)
-            }
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(palette.background)
         )
-        .cornerRadius(20)
-        .shadow(color: palette.shadowColor, radius: 16, x: 0, y: 8)
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(palette.border, lineWidth: 1.0)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .shadow(color: palette.shadowColor, radius: 20, x: 0, y: 10)
         .onAppear {
             customHexInput = theme.customHex
         }
@@ -510,13 +511,14 @@ public struct PrayerSettingsSheet: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 7)
             .background(
-                ZStack {
-                    palette.background
-                    RoundedRectangle(cornerRadius: 14)
-                        .stroke(palette.border, lineWidth: 1)
-                }
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(palette.background)
             )
-            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(palette.border, lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .shadow(color: accent.opacity(0.25), radius: 6, x: 0, y: 3)
         }
     }
