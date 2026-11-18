@@ -35,13 +35,13 @@ public struct PrayerCalculator {
             return nil
         }
         
-        // Terapkan koreksi ihtiyati per waktu shalat
-        let fajrAdj = Double((adjustments[.fajr] ?? 2) * 60)
+        // Terapkan koreksi ihtiyati per waktu shalat (default 0 jika tidak dispesifikasikan)
+        let fajrAdj = Double((adjustments[.fajr] ?? 0) * 60)
         let sunriseAdj = Double((adjustments[.sunrise] ?? 0) * 60)
-        let dhuhrAdj = Double((adjustments[.dhuhr] ?? 2) * 60)
-        let asrAdj = Double((adjustments[.asr] ?? 2) * 60)
-        let maghribAdj = Double((adjustments[.maghrib] ?? 2) * 60)
-        let ishaAdj = Double((adjustments[.isha] ?? 2) * 60)
+        let dhuhrAdj = Double((adjustments[.dhuhr] ?? 0) * 60)
+        let asrAdj = Double((adjustments[.asr] ?? 0) * 60)
+        let maghribAdj = Double((adjustments[.maghrib] ?? 0) * 60)
+        let ishaAdj = Double((adjustments[.isha] ?? 0) * 60)
         
         let adjustedFajr = prayers.fajr.addingTimeInterval(fajrAdj)
         let adjustedSunrise = prayers.sunrise.addingTimeInterval(sunriseAdj)
