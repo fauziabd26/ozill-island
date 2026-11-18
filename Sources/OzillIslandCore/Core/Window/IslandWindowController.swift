@@ -82,6 +82,7 @@ public final class IslandWindowController: NSObject {
     /// Membuka langsung halaman Settings di floating island
     public func openSettings() {
         setupAndShow()
+        IdleDimmingService.shared.recordActivity()
         panel?.makeKeyAndOrderFront(nil)
         PrayerIslandViewModel.shared.openSettings()
     }
@@ -89,17 +90,20 @@ public final class IslandWindowController: NSObject {
     /// Membuka ke tampilan expanded
     public func expand() {
         setupAndShow()
+        IdleDimmingService.shared.recordActivity()
         PrayerIslandViewModel.shared.expand()
     }
     
     /// Menutup panel kembali ke pill collapsed
     public func collapse() {
+        IdleDimmingService.shared.recordActivity()
         PrayerIslandViewModel.shared.collapse()
     }
     
     /// Toggle antara collapsed dan expanded
     public func toggleExpand() {
         setupAndShow()
+        IdleDimmingService.shared.recordActivity()
         PrayerIslandViewModel.shared.toggle()
     }
     

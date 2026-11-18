@@ -95,6 +95,9 @@ public struct CollapsedMusicPill: View {
             y: isHovered ? 1 : 0
         )
         .onHover { hovering in
+            if hovering {
+                IdleDimmingService.shared.recordActivity()
+            }
             withAnimation(.spring(response: 0.32, dampingFraction: 0.72)) {
                 self.isHovered = hovering
             }

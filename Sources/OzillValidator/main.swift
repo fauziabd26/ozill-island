@@ -1171,6 +1171,32 @@ struct OzillValidatorApp {
             assert(errStr.contains("timed out"), "Pesan error harus mengindikasikan timeout")
         }
 
+        // Assertion 34: IdleDimmingService Auto-Transparency (> 15 Menit) & Waking Interaction
+        runTest("IdleDimmingService: Transparansi Otomatis Saat Idle > 15 Menit dan Reaktivasi Instan") {
+            let service = IdleDimmingService(timeoutSeconds: 900)
+            
+            // 1. Kondisi awal: aktif penuh (1.0)
+            assert(service.isDimmed == false)
+            assert(service.currentOpacity == 1.0)
+            
+            // 2. Simulasi waktu belum mencapai 15 menit (10 menit / 600 detik)
+            let tenMinutesLater = Date().addingTimeInterval(600)
+            service.evaluateIdleState(simulatedDate: tenMinutesLater)
+            assert(service.isDimmed == false, "Sebelum 15 menit tidak boleh transparan")
+            assert(service.currentOpacity == 1.0)
+            
+            // 3. Simulasi waktu melewati batas 15 menit (16 menit / 960 detik)
+            let sixteenMinutesLater = Date().addingTimeInterval(960)
+            service.evaluateIdleState(simulatedDate: sixteenMinutesLater)
+            assert(service.isDimmed == true, "Harus menjadi transparan setelah > 15 menit idle")
+            assert(service.currentOpacity == service.dimmedOpacity)
+            
+            // 4. Interaksi pengguna (hover / klik) langsung membangkitkan ke opasitas penuh (1.0)
+            service.recordActivity()
+            assert(service.isDimmed == false, "Aktivitas pengguna harus seketika mengembalikan opasitas")
+            assert(service.currentOpacity == 1.0)
+        }
+
         print("""
 
         ================================================================================
@@ -1194,7 +1220,8 @@ struct OzillValidatorApp {
            17. BrowserMusicProvider: Multi-tab prioritization (Playing > Paused) & override (Assertion 31 PASS).
            18. UniversalMusicManager: Koordinasi multi-provider & dynamic mode router (Assertion 32 PASS).
            19. ScriptBridge: Eksekusi AppleScript background non-blocking & timeout watchdog (Assertion 33 PASS).
-           20. Seluruh 33 Automated Validation Assertions BERHASIL (PASS).
+           20. IdleDimmingService: Transparansi otomatis saat idle > 15 menit dan reaktivasi instan (Assertion 34 PASS).
+           21. Seluruh 34 Automated Validation Assertions BERHASIL (PASS).
         ================================================================================
         """)
     }
