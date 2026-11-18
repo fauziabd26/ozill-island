@@ -51,15 +51,21 @@ public final class IslandWindowController: NSObject {
         PrayerIslandViewModel.shared.openSettings()
     }
     
-    /// Toggle antara collapsed dan expanded
-    public func toggleExpand() {
+    /// Membuka ke tampilan expanded
+    public func expand() {
         setupAndShow()
-        PrayerIslandViewModel.shared.toggleExpand()
+        PrayerIslandViewModel.shared.expand()
     }
     
     /// Menutup panel kembali ke pill collapsed
     public func collapse() {
         PrayerIslandViewModel.shared.collapse()
+    }
+    
+    /// Toggle antara collapsed dan expanded
+    public func toggleExpand() {
+        setupAndShow()
+        PrayerIslandViewModel.shared.toggle()
     }
     
     public func updateFrame(for state: IslandState, animated: Bool = true) {
@@ -81,7 +87,17 @@ public final class IslandWindowController: NSObject {
         }
         
         let targetFrame = calculateFrame(width: width, height: height)
-        panel.setFrame(targetFrame, display: true, animate: animated)
+        
+        if animated {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.32
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                context.allowsImplicitAnimation = true
+                panel.animator().setFrame(targetFrame, display: true)
+            }
+        } else {
+            panel.setFrame(targetFrame, display: true)
+        }
     }
     
     private func calculateFrame(width: CGFloat, height: CGFloat) -> NSRect {

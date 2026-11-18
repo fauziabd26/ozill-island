@@ -26,31 +26,49 @@ public final class PrayerIslandViewModel: ObservableObject {
     
     public init() {}
     
-    public func toggleExpand() {
-        withAnimation(.spring(response: 0.38, dampingFraction: 0.8)) {
-            if state == .collapsed {
-                state = .expanded
-            } else {
-                state = .collapsed
-            }
-        }
-    }
-    
-    public func openSettings() {
-        withAnimation(.spring(response: 0.38, dampingFraction: 0.8)) {
-            state = .settings
-        }
-    }
-    
-    public func closeToExpanded() {
-        withAnimation(.spring(response: 0.38, dampingFraction: 0.8)) {
+    /// Transisi deterministik ke state expanded
+    public func expand() {
+        guard state != .expanded else { return }
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
             state = .expanded
         }
     }
     
+    /// Transisi deterministik ke state collapsed
     public func collapse() {
-        withAnimation(.spring(response: 0.38, dampingFraction: 0.8)) {
+        guard state != .collapsed else { return }
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
             state = .collapsed
         }
+    }
+    
+    /// Buka halaman settings
+    public func openSettings() {
+        guard state != .settings else { return }
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+            state = .settings
+        }
+    }
+    
+    /// Tutup settings dan kembali ke expanded sheet
+    public func closeToExpanded() {
+        guard state != .expanded else { return }
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+            state = .expanded
+        }
+    }
+    
+    /// Toggle antara collapsed dan expanded secara aman
+    public func toggle() {
+        if state == .collapsed {
+            expand()
+        } else {
+            collapse()
+        }
+    }
+    
+    /// Alias untuk kompatibilitas pemanggil yang ada
+    public func toggleExpand() {
+        toggle()
     }
 }

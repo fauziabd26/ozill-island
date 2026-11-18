@@ -2,8 +2,18 @@ import SwiftUI
 
 public struct CollapsedPrayerPill: View {
     @ObservedObject var vm: PrayerIslandViewModel
+    @ObservedObject private var theme = IslandThemeManager.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isHovered: Bool = false
+    
+    public init(vm: PrayerIslandViewModel) {
+        self.vm = vm
+    }
     
     public var body: some View {
+        let palette = theme.palette
+        let accent = theme.effectiveAccentColor
+        
         HStack(spacing: 12) {
             // Left: SF Symbol + Prayer Name & Time
             HStack(spacing: 7) {
@@ -14,18 +24,18 @@ public struct CollapsedPrayerPill: View {
                 } else {
                     Image(systemName: vm.scheduler.nextPrayerName.sfSymbol)
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(.orange)
+                        .foregroundColor(accent)
                 }
                 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(vm.audioManager.isPlaying ? "Adzan \(vm.audioManager.currentPrayerName)" : vm.scheduler.nextPrayerName.rawValue)
                         .font(.system(size: 12, weight: .semibold, design: .rounded))
-                        .foregroundColor(.white)
+                        .foregroundColor(palette.primaryText)
                     
                     if let schedule = vm.scheduler.schedule {
                         Text(schedule.formattedTime(for: vm.scheduler.nextPrayerName, timeZone: vm.locationManager.currentTimeZone))
                             .font(.system(size: 10, weight: .regular, design: .monospaced))
-                            .foregroundColor(.white.opacity(0.6))
+                            .foregroundColor(palette.secondaryText)
                     }
                 }
             }
@@ -45,7 +55,7 @@ public struct CollapsedPrayerPill: View {
                     }
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(Color.red.opacity(0.8))
+                    .background(Color.red.opacity(0.85))
                     .foregroundColor(.white)
                     .cornerRadius(10)
                 }
@@ -54,14 +64,14 @@ public struct CollapsedPrayerPill: View {
                 HStack(spacing: 4) {
                     Image(systemName: "hourglass")
                         .font(.system(size: 9))
-                        .foregroundColor(.white.opacity(0.5))
+                        .foregroundColor(palette.secondaryText)
                     Text(vm.scheduler.timeRemainingString)
                         .font(.system(size: 11, weight: .bold, design: .monospaced))
-                        .foregroundColor(.green.opacity(0.95))
+                        .foregroundColor(accent)
                 }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3.5)
-                .background(Color.white.opacity(0.1))
+                .background(palette.cardBackground)
                 .cornerRadius(10)
             }
         }
@@ -70,12 +80,31 @@ public struct CollapsedPrayerPill: View {
         .frame(width: 250, height: 38)
         .background(
             ZStack {
-                Color.black.opacity(0.92)
+                palette.background
                 RoundedRectangle(cornerRadius: 19)
-                    .stroke(vm.isHovered ? Color.white.opacity(0.28) : Color.white.opacity(0.12), lineWidth: 1)
+                    .stroke(
+                        isHovered ? palette.hoverBorder : palette.border,
+                        lineWidth: isHovered ? 1.4 : 1.0
+                    )
             }
         )
         .clipShape(Capsule())
-        .shadow(color: Color.black.opacity(0.4), radius: 10, x: 0, y: 5)
+        .contentShape(Capsule())
+        .scaleEffect(isHovered && !reduceMotion ? 1.03 : 1.0)
+        .shadow(
+            color: isHovered ? accent.opacity(0.35) : palette.shadowColor,
+            radius: isHovered ? 14 : 8,
+            x: 0,
+            y: isHovered ? 6 : 4
+        )
+        .onHover { hovering in
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.72)) {
+                self.isHovered = hovering
+            }
+        }
+        .onTapGesture {
+            vm.expand()
+        }
+        .help("Klik untuk membuka Ozill Island")
     }
 }
