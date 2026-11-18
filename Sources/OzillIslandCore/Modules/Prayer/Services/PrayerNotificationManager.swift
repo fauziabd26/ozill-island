@@ -1,9 +1,12 @@
 import Foundation
 import UserNotifications
 
-public final class PrayerNotificationManager {
+/// Mengelola antrean notifikasi lokal macOS untuk pengingat dan waktu masuk shalat.
+/// Menggunakan aktor atau serialisasi berbasis revision token untuk mencegah race condition antar Task yang berjalan paralel.
+public actor PrayerNotificationManager {
     public static let shared = PrayerNotificationManager()
     private let center = UNUserNotificationCenter.current()
+    private var currentSchedulingRevision: UInt64 = 0
     
     public init() {}
     
@@ -18,20 +21,25 @@ public final class PrayerNotificationManager {
         }
     }
     
-    /// Menjadwalkan reminder dan notifikasi masuk waktu untuk jadwal hari ini + Subuh hari esok
+    /// Menjadwalkan reminder dan notifikasi masuk waktu untuk jadwal hari ini + Subuh hari esok.
+    /// Dilindungi dengan revision token agar eksekusi yang lebih baru tidak tertimpa oleh eksekusi yang lebih lama.
     public func scheduleAll(
         todaySchedule: PrayerSchedule,
         tomorrowSchedule: PrayerSchedule?,
-        preferences: [PrayerName: PrayerPreference]
+        preferences: [PrayerName: PrayerPreference],
+        timeZone: TimeZone = .current
     ) async {
-        // Hapus pending notification lama agar antrean tidak menumpuk dan tidak duplikat
-        center.removeAllPendingNotificationRequests()
+        currentSchedulingRevision &+= 1
+        let thisRevision = currentSchedulingRevision
         
         let now = Date()
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "id_ID")
-        formatter.timeZone = .current
+        formatter.timeZone = timeZone
         formatter.dateFormat = "HH:mm"
+        let tzAbbr = timeZone.abbreviation(for: now) ?? "WIB"
+        
+        var pendingRequests: [UNNotificationRequest] = []
         
         // 1. Jadwal Hari Ini
         for prayer in PrayerName.fardhuPrayers {
@@ -47,17 +55,19 @@ public final class PrayerNotificationManager {
                 if reminderDate > now {
                     let content = UNMutableNotificationContent()
                     content.title = "Pengingat Shalat \(prayer.rawValue)"
-                    content.body = "\(pref.reminderMinutes) menit menuju waktu \(prayer.rawValue) (\(prayerTimeString) WIB)."
+                    content.body = "\(pref.reminderMinutes) menit menuju waktu \(prayer.rawValue) (\(prayerTimeString) \(tzAbbr))."
                     content.sound = .default
                     
-                    let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: reminderDate)
+                    var cal = Calendar(identifier: .gregorian)
+                    cal.timeZone = timeZone
+                    let components = cal.dateComponents([.year, .month, .day, .hour, .minute], from: reminderDate)
                     let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
                     let request = UNNotificationRequest(
                         identifier: "ozill-today-reminder-\(prayer.rawValue)",
                         content: content,
                         trigger: trigger
                     )
-                    try? await center.add(request)
+                    pendingRequests.append(request)
                 }
             }
             
@@ -65,17 +75,19 @@ public final class PrayerNotificationManager {
             if prayerDate > now {
                 let content = UNMutableNotificationContent()
                 content.title = "Waktu \(prayer.rawValue) Telah Tiba"
-                content.body = "Sudah masuk waktu shalat \(prayer.rawValue) (\(prayerTimeString)). Mari tunaikan shalat."
+                content.body = "Sudah masuk waktu shalat \(prayer.rawValue) (\(prayerTimeString) \(tzAbbr)). Mari tunaikan shalat."
                 content.sound = .default
                 
-                let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: prayerDate)
+                var cal = Calendar(identifier: .gregorian)
+                cal.timeZone = timeZone
+                let components = cal.dateComponents([.year, .month, .day, .hour, .minute], from: prayerDate)
                 let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
                 let request = UNNotificationRequest(
                     identifier: "ozill-today-adhan-\(prayer.rawValue)",
                     content: content,
                     trigger: trigger
                 )
-                try? await center.add(request)
+                pendingRequests.append(request)
             }
         }
         
@@ -92,17 +104,19 @@ public final class PrayerNotificationManager {
                     if reminderDate > now {
                         let content = UNMutableNotificationContent()
                         content.title = "Pengingat Shalat Subuh Besok"
-                        content.body = "\(fajrPref.reminderMinutes) menit menuju waktu Subuh (\(tomorrowFajrString) WIB)."
+                        content.body = "\(fajrPref.reminderMinutes) menit menuju waktu Subuh (\(tomorrowFajrString) \(tzAbbr))."
                         content.sound = .default
                         
-                        let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: reminderDate)
+                        var cal = Calendar(identifier: .gregorian)
+                        cal.timeZone = timeZone
+                        let components = cal.dateComponents([.year, .month, .day, .hour, .minute], from: reminderDate)
                         let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
                         let request = UNNotificationRequest(
                             identifier: "ozill-tomorrow-reminder-Subuh",
                             content: content,
                             trigger: trigger
                         )
-                        try? await center.add(request)
+                        pendingRequests.append(request)
                     }
                 }
                 
@@ -110,19 +124,33 @@ public final class PrayerNotificationManager {
                 if tomorrowFajr > now {
                     let content = UNMutableNotificationContent()
                     content.title = "Waktu Subuh Telah Tiba"
-                    content.body = "Sudah masuk waktu shalat Subuh (\(tomorrowFajrString)). Mari tunaikan shalat."
+                    content.body = "Sudah masuk waktu shalat Subuh (\(tomorrowFajrString) \(tzAbbr)). Mari tunaikan shalat."
                     content.sound = .default
                     
-                    let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: tomorrowFajr)
+                    var cal = Calendar(identifier: .gregorian)
+                    cal.timeZone = timeZone
+                    let components = cal.dateComponents([.year, .month, .day, .hour, .minute], from: tomorrowFajr)
                     let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
                     let request = UNNotificationRequest(
                         identifier: "ozill-tomorrow-adhan-Subuh",
                         content: content,
                         trigger: trigger
                     )
-                    try? await center.add(request)
+                    pendingRequests.append(request)
                 }
             }
+        }
+        
+        // Cek kembali revision token: Jika ada penjadwalan lebih baru yang masuk selama proses, batalkan hasil lama
+        guard thisRevision == self.currentSchedulingRevision else {
+            return
+        }
+        
+        // Hapus pending lama dan tambahkan antrean baru yang sudah disiapkan
+        center.removeAllPendingNotificationRequests()
+        for req in pendingRequests {
+            guard thisRevision == self.currentSchedulingRevision else { return }
+            try? await center.add(req)
         }
     }
 }

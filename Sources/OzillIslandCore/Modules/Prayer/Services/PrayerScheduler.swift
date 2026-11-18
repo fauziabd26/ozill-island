@@ -2,9 +2,24 @@ import Foundation
 import Combine
 import AppKit
 
+public struct MissedPrayerOccurrence: Equatable {
+    public let prayer: PrayerName
+    public let time: Date
+    
+    public init(prayer: PrayerName, time: Date) {
+        self.prayer = prayer
+        self.time = time
+    }
+}
+
 @MainActor
 public final class PrayerScheduler: ObservableObject {
     public static let shared = PrayerScheduler()
+    
+    // MARK: - Named Constants
+    public static let maxSleepDurationToAnalyze: TimeInterval = 24 * 60 * 60 // 24 Jam
+    public static let minSleepDurationToAnalyze: TimeInterval = 15 // 15 Detik
+    public static let adhanOnsetToleranceWindow: TimeInterval = 45 // 45 Detik
     
     @Published public var schedule: PrayerSchedule?
     @Published public var tomorrowSchedule: PrayerSchedule?
@@ -18,10 +33,11 @@ public final class PrayerScheduler: ObservableObject {
     private var timer: Timer?
     private var lastCalculatedDateComponents: DateComponents?
     private var cancellables = Set<AnyCancellable>()
-    private var lastTriggeredPrayerForAdhan: String?
+    private var triggeredPrayerKeys = Set<String>()
     private var lastActiveTime: Date = Date()
     private var isInitialLaunch: Bool = true
     private var observerTokens: [NSObjectProtocol] = []
+    private var notificationTask: Task<Void, Never>?
     
     public init() {
         setupSubscriptions()
@@ -31,6 +47,7 @@ public final class PrayerScheduler: ObservableObject {
     
     deinit {
         timer?.invalidate()
+        notificationTask?.cancel()
         for token in observerTokens {
             NotificationCenter.default.removeObserver(token)
             NSWorkspace.shared.notificationCenter.removeObserver(token)
@@ -137,8 +154,8 @@ public final class PrayerScheduler: ObservableObject {
         }
         
         let elapsed = now.timeIntervalSince(sleepStartTime)
-        // Jika sleep sangat singkat (< 15 detik), tidak perlu analisis missed prayer
-        guard elapsed >= 15 else {
+        // Jika sleep sangat singkat di bawah ambang batas, tidak perlu analisis missed prayer
+        guard elapsed >= Self.minSleepDurationToAnalyze else {
             recalculate(
                 latitude: LocationManager.shared.latitude,
                 longitude: LocationManager.shared.longitude,
@@ -153,7 +170,7 @@ public final class PrayerScheduler: ObservableObject {
         let cityName = LocationManager.shared.locationName
         
         // Kebijakan Durasi Tidur > 24 Jam (Multi-day sleep)
-        if elapsed > 86400 {
+        if elapsed > Self.maxSleepDurationToAnalyze {
             self.missedPrayerAlert = "Mac berada dalam mode tidur lebih dari 24 jam. Jadwal shalat telah diperbarui secara otomatis."
             // Blacklist seluruh waktu shalat hari ini yang sudah lewat agar tidak memicu adzan
             recalculate(latitude: lat, longitude: lon, timeZone: tz)
@@ -165,7 +182,7 @@ public final class PrayerScheduler: ObservableObject {
                     if pTime <= now {
                         let comp = cal.dateComponents([.year, .month, .day], from: pTime)
                         let triggerKey = "\(prayer.rawValue)-\(comp.year ?? 0)-\(comp.month ?? 0)-\(comp.day ?? 0)"
-                        self.lastTriggeredPrayerForAdhan = triggerKey
+                        self.triggeredPrayerKeys.insert(triggerKey)
                     }
                 }
             }
@@ -173,7 +190,7 @@ public final class PrayerScheduler: ObservableObject {
         }
         
         // Durasi tidur <= 24 Jam: Periksa hari-hari yang dilintasi antara sleepStartTime dan now
-        var missedPrayers: [PrayerName] = []
+        var missedOccurrences: [MissedPrayerOccurrence] = []
         var cal = Calendar(identifier: .gregorian)
         cal.timeZone = tz
         
@@ -196,19 +213,28 @@ public final class PrayerScheduler: ObservableObject {
                 for prayer in PrayerName.fardhuPrayers {
                     let pTime = sched.time(for: prayer)
                     if pTime > sleepStartTime && pTime <= now {
-                        missedPrayers.append(prayer)
+                        missedOccurrences.append(MissedPrayerOccurrence(prayer: prayer, time: pTime))
                         // Blacklist secara ketat dari pemicu adzan retroaktif
                         let comp = cal.dateComponents([.year, .month, .day], from: pTime)
                         let triggerKey = "\(prayer.rawValue)-\(comp.year ?? 0)-\(comp.month ?? 0)-\(comp.day ?? 0)"
-                        self.lastTriggeredPrayerForAdhan = triggerKey
+                        self.triggeredPrayerKeys.insert(triggerKey)
                     }
                 }
             }
         }
         
-        if !missedPrayers.isEmpty {
-            let names = missedPrayers.map(\.rawValue).joined(separator: ", ")
-            self.missedPrayerAlert = "Waktu \(names) telah masuk saat Mac berada dalam mode tidur."
+        if !missedOccurrences.isEmpty {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "HH:mm"
+            formatter.timeZone = tz
+            let tzAbbr = tz.abbreviation(for: now) ?? ""
+            
+            let parts = missedOccurrences.map { occ in
+                "\(occ.prayer.rawValue) (\(formatter.string(from: occ.time)))"
+            }.joined(separator: ", ")
+            
+            let tzSuffix = tzAbbr.isEmpty ? "" : " \(tzAbbr)"
+            self.missedPrayerAlert = "Waktu \(parts)\(tzSuffix) telah masuk saat Mac berada dalam mode tidur."
         }
         
         recalculate(latitude: lat, longitude: lon, timeZone: tz)
@@ -261,14 +287,16 @@ public final class PrayerScheduler: ObservableObject {
         
         updateNextPrayer()
         
-        // 3. Jadwalkan notifikasi sistem macOS
+        // 3. Jadwalkan notifikasi sistem macOS dengan pembatalan task aktif sebelumnya
         if let sched = todaySched {
             let prefs = PrayerSettings.shared.preferences
-            Task {
+            notificationTask?.cancel()
+            notificationTask = Task {
                 await PrayerNotificationManager.shared.scheduleAll(
                     todaySchedule: sched,
                     tomorrowSchedule: tomorrowSched,
-                    preferences: prefs
+                    preferences: prefs,
+                    timeZone: timeZone
                 )
             }
         }
@@ -297,6 +325,7 @@ public final class PrayerScheduler: ObservableObject {
         // Deteksi pergantian hari kalender di timezone lokasi shalat (bukan hanya jam Mac lokal)
         if let last = lastCalculatedDateComponents, last != currentDayComponents {
             lastCalculatedDateComponents = currentDayComponents
+            pruneTriggeredPrayerKeys(currentDate: now, timeZone: tz)
             recalculate(
                 latitude: LocationManager.shared.latitude,
                 longitude: LocationManager.shared.longitude,
@@ -308,6 +337,26 @@ public final class PrayerScheduler: ObservableObject {
         
         updateNextPrayer()
         checkAdhanTrigger(now: now)
+    }
+    
+    /// Membersihkan kunci adzan lama agar memori Set<String> tidak bertumbuh tanpa batas
+    private func pruneTriggeredPrayerKeys(currentDate: Date, timeZone: TimeZone) {
+        guard triggeredPrayerKeys.count > 20 else { return }
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = timeZone
+        
+        // Hanya pertahankan key untuk 3 hari: kemarin, hari ini, dan besok
+        var allowedDateStrings = Set<String>()
+        for offset in -1...1 {
+            if let d = cal.date(byAdding: .day, value: offset, to: currentDate) {
+                let comp = cal.dateComponents([.year, .month, .day], from: d)
+                allowedDateStrings.insert("\(comp.year ?? 0)-\(comp.month ?? 0)-\(comp.day ?? 0)")
+            }
+        }
+        
+        triggeredPrayerKeys = triggeredPrayerKeys.filter { key in
+            allowedDateStrings.contains { dateStr in key.hasSuffix(dateStr) }
+        }
     }
     
     private func updateNextPrayer() {
@@ -333,7 +382,7 @@ public final class PrayerScheduler: ObservableObject {
     }
     
     /// Mengecek apakah detik ini tepat masuk waktu shalat untuk memutar adzan jika diaktifkan.
-    /// Hanya memicu jika berada dalam jendela toleransi [0 ..< 45 detik] dari waktu masuk shalat.
+    /// Menggunakan Set<String> deduplication dan toleransi jendela onset ketat.
     private func checkAdhanTrigger(now: Date) {
         guard let schedule = schedule else { return }
         let tz = LocationManager.shared.currentTimeZone
@@ -348,8 +397,8 @@ public final class PrayerScheduler: ObservableObject {
             let prayerDate = schedule.time(for: prayer)
             let diffSeconds = now.timeIntervalSince(prayerDate)
             
-            // Hanya aktifkan jika masuk tepat di menit shalat (selisih antara 0 hingga 45 detik)
-            guard diffSeconds >= 0 && diffSeconds < 45 else { continue }
+            // Hanya aktifkan jika masuk tepat di menit shalat (selisih antara 0 hingga ambang batas toleransi)
+            guard diffSeconds >= 0 && diffSeconds < Self.adhanOnsetToleranceWindow else { continue }
             
             let prayerComponents = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: prayerDate)
             
@@ -360,8 +409,8 @@ public final class PrayerScheduler: ObservableObject {
                nowComponents.minute == prayerComponents.minute {
                 
                 let triggerKey = "\(prayer.rawValue)-\(nowComponents.year ?? 0)-\(nowComponents.month ?? 0)-\(nowComponents.day ?? 0)"
-                if lastTriggeredPrayerForAdhan != triggerKey {
-                    lastTriggeredPrayerForAdhan = triggerKey
+                if !triggeredPrayerKeys.contains(triggerKey) {
+                    triggeredPrayerKeys.insert(triggerKey)
                     AdhanAudioManager.shared.play(for: prayer)
                 }
             }
