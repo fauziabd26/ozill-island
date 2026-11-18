@@ -30,22 +30,49 @@ public struct ExpandedMusicSheet: View {
                 
                 Spacer()
                 
-                // Collapse button
-                Button(action: {
-                    PrayerIslandViewModel.shared.collapse()
-                }) {
-                    Image(systemName: "chevron.up")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(palette.primaryText)
-                        .frame(width: 32, height: 32)
+                HStack(spacing: 8) {
+                    // Pin button
+                    Button(action: {
+                        withAnimation(.spring(response: 0.28, dampingFraction: 0.75)) {
+                            musicManager.togglePin()
+                        }
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: musicManager.isPinnedToMusic ? "pin.fill" : "pin")
+                                .font(.system(size: 10.5, weight: .bold))
+                            if musicManager.isPinnedToMusic {
+                                Text("Pinned")
+                                    .font(.system(size: 9.5, weight: .heavy))
+                            }
+                        }
+                        .foregroundColor(musicManager.isPinnedToMusic ? .white : palette.secondaryText)
+                        .padding(.horizontal, musicManager.isPinnedToMusic ? 9 : 8)
+                        .frame(height: 32)
                         .background(
-                            Circle()
-                                .fill(palette.cardBackground)
+                            Capsule(style: .continuous)
+                                .fill(musicManager.isPinnedToMusic ? accent : palette.cardBackground)
                         )
-                        .contentShape(Circle())
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .help(musicManager.isPinnedToMusic ? "Lepas Pin Musik (Kembali ke Otomatis)" : "Pin Musik ke Island (Agar Tidak Hilang)")
+                    
+                    // Collapse button
+                    Button(action: {
+                        PrayerIslandViewModel.shared.collapse()
+                    }) {
+                        Image(systemName: "chevron.up")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(palette.primaryText)
+                            .frame(width: 32, height: 32)
+                            .background(
+                                Circle()
+                                    .fill(palette.cardBackground)
+                            )
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .help("Tutup Island")
                 }
-                .buttonStyle(PlainButtonStyle())
-                .help("Tutup Island")
             }
             
             // Media Card (Thumbnail / Artwork & Info)

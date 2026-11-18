@@ -6,6 +6,7 @@ public struct PrayerSettingsSheet: View {
     @ObservedObject private var theme = IslandThemeManager.shared
     @ObservedObject private var launchManager = LaunchAtLoginManager.shared
     @ObservedObject private var sys = SystemInfoService.shared
+    @ObservedObject private var musicManager = UniversalMusicManager.shared
     @State private var selectedTab: Int = 0
     @State private var customHexInput: String = ""
     
@@ -397,6 +398,39 @@ public struct PrayerSettingsSheet: View {
                         .fill(palette.cardBackground)
                 )
                 
+                // Pin Music Toggle
+                HStack {
+                    VStack(alignment: .leading, spacing: 1) {
+                        HStack(spacing: 4) {
+                            Text("Pin Pemutar Musik ke Island")
+                                .font(.system(size: 11.5, weight: .semibold))
+                                .foregroundColor(palette.primaryText)
+                            if musicManager.isPinnedToMusic {
+                                Image(systemName: "pin.fill")
+                                    .font(.system(size: 9))
+                                    .foregroundColor(accent)
+                            }
+                        }
+                        Text("Kunci Island ke modul musik agar tidak hilang saat jeda lagu")
+                            .font(.system(size: 9.5))
+                            .foregroundColor(palette.secondaryText)
+                    }
+                    Spacer()
+                    Toggle("", isOn: Binding(
+                        get: { musicManager.isPinnedToMusic },
+                        set: { _ in
+                            musicManager.togglePin()
+                        }
+                    ))
+                    .toggleStyle(SwitchToggleStyle(tint: accent))
+                    .labelsHidden()
+                }
+                .padding(8)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(palette.cardBackground)
+                )
+                
                 // Global Shortcut Info
                 HStack(spacing: 8) {
                     Image(systemName: "command.square.fill")
@@ -418,6 +452,7 @@ public struct PrayerSettingsSheet: View {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .fill(palette.cardBackground)
                 )
+
                 
                 // Charger Animation Test Button
                 Button(action: {

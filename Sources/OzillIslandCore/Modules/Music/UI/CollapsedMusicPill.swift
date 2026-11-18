@@ -62,11 +62,19 @@ public struct CollapsedMusicPill: View {
                         }
                         
                         VStack(alignment: .leading, spacing: 1) {
-                            Text(item?.title ?? "Tidak Ada Musik")
-                                .font(.system(size: 11.5, weight: .bold, design: .rounded))
-                                .foregroundColor(palette.primaryText)
-                                .lineLimit(1)
-                                .frame(maxWidth: 215, alignment: .leading)
+                            HStack(spacing: 4) {
+                                Text(item?.title ?? "Tidak Ada Musik")
+                                    .font(.system(size: 11.5, weight: .bold, design: .rounded))
+                                    .foregroundColor(palette.primaryText)
+                                    .lineLimit(1)
+                                
+                                if musicManager.isPinnedToMusic {
+                                    Image(systemName: "pin.fill")
+                                        .font(.system(size: 8))
+                                        .foregroundColor(accent)
+                                }
+                            }
+                            .frame(maxWidth: 215, alignment: .leading)
                             
                             Text(item?.artist ?? "Pilih lagu di browser / player")
                                 .font(.system(size: 9.5, weight: .regular))

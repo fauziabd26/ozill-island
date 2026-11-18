@@ -9,6 +9,8 @@ public final class BrowserMusicProvider: MusicProvider, @unchecked Sendable {
     private var adapters: [BrowserAdapter]
     private var activeSessions: [BrowserMediaSession] = []
     private var selectedSessionId: String?
+    private var lastFetchTimestamp: Date?
+    private let cacheInterval: TimeInterval = 0.8
     
     public var isAvailable: Bool {
         lock.withLock {
@@ -38,7 +40,19 @@ public final class BrowserMusicProvider: MusicProvider, @unchecked Sendable {
     }
     
     /// Mengambil seluruh sesi media yang terdeteksi di seluruh browser
-    public func fetchAllSessions() async -> [BrowserMediaSession] {
+    public func fetchAllSessions(force: Bool = false) async -> [BrowserMediaSession] {
+        if !force {
+            let cached = lock.withLock { () -> [BrowserMediaSession]? in
+                if let last = lastFetchTimestamp, Date().timeIntervalSince(last) < cacheInterval {
+                    return activeSessions
+                }
+                return nil
+            }
+            if let c = cached {
+                return c
+            }
+        }
+        
         var all: [BrowserMediaSession] = []
         for adapter in adapters where adapter.isBrowserRunning {
             let found = await adapter.detectMediaSessions()
@@ -47,6 +61,7 @@ public final class BrowserMusicProvider: MusicProvider, @unchecked Sendable {
         
         lock.withLock {
             self.activeSessions = all
+            self.lastFetchTimestamp = Date()
             // Jika sesi yang dipilih sebelumnya sudah tidak ada, reset seleksi
             if let selected = self.selectedSessionId, !all.contains(where: { $0.id == selected }) {
                 self.selectedSessionId = nil
@@ -74,21 +89,25 @@ public final class BrowserMusicProvider: MusicProvider, @unchecked Sendable {
     }
     
     public func playPause() async throws {
+        lock.withLock { lastFetchTimestamp = nil }
         let (session, adapter) = try resolveActiveTarget()
         try await adapter.playPause(sessionId: session.id)
     }
     
     public func next() async throws {
+        lock.withLock { lastFetchTimestamp = nil }
         let (session, adapter) = try resolveActiveTarget()
         try await adapter.next(sessionId: session.id)
     }
     
     public func previous() async throws {
+        lock.withLock { lastFetchTimestamp = nil }
         let (session, adapter) = try resolveActiveTarget()
         try await adapter.previous(sessionId: session.id)
     }
     
     public func seek(to seconds: TimeInterval) async throws {
+        lock.withLock { lastFetchTimestamp = nil }
         let (session, adapter) = try resolveActiveTarget()
         try await adapter.seek(to: seconds, sessionId: session.id)
     }

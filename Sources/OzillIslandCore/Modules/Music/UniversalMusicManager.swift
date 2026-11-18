@@ -10,6 +10,9 @@ public final class UniversalMusicManager: ObservableObject {
     @Published public private(set) var playbackState: PlaybackState = .stopped
     @Published public private(set) var activeProvider: (any MusicProvider)?
     @Published public private(set) var detectedSessionsCount: Int = 0
+    @Published public private(set) var isPinnedToMusic: Bool = false
+    
+    public static let pinnedMusicKey = "ozill_is_pinned_to_music"
     
     public let browserProvider = BrowserMusicProvider()
     public let spotifyProvider = SpotifyProvider()
@@ -19,8 +22,12 @@ public final class UniversalMusicManager: ObservableObject {
     private var pollTimer: Timer?
     private var manualSelectedProviderId: String?
     private var isPolling = false
+    private var lastKnownItem: NowPlayingItem?
+    private var lastKnownProvider: (any MusicProvider)?
+    private var lastActiveMediaTimestamp: Date?
     
     public init() {
+        self.isPinnedToMusic = UserDefaults.standard.bool(forKey: Self.pinnedMusicKey)
         startPolling()
     }
     
@@ -98,6 +105,22 @@ public final class UniversalMusicManager: ObservableObject {
             }
         }
         
+        // 4. Fallback ke last known item / provider jika masih dalam grace period (60 detik) atau sedang di-PIN!
+        if candidateItem == nil {
+            if let last = lastKnownItem, let lastProv = lastKnownProvider {
+                let elapsed = lastActiveMediaTimestamp.map { Date().timeIntervalSince($0) } ?? 0
+                if isPinnedToMusic || elapsed < 60.0 {
+                    candidateProvider = lastProv
+                    candidateItem = last
+                    candidateState = .paused
+                }
+            }
+        } else {
+            self.lastKnownItem = candidateItem
+            self.lastKnownProvider = candidateProvider
+            self.lastActiveMediaTimestamp = Date()
+        }
+        
         self.activeProvider = candidateProvider
         self.currentItem = candidateItem
         self.playbackState = candidateState
@@ -106,9 +129,25 @@ public final class UniversalMusicManager: ObservableObject {
         // Sinkronisasi ke modul MusicIslandModule agar router memperhitungkan prioritas
         MusicIslandModule.shared.provider = candidateProvider
         MusicIslandModule.shared.playbackState = candidateState
+        MusicIslandModule.shared.isPinned = isPinnedToMusic
         
         // Picu evaluasi rute IslandModeRouter
         await IslandModeRouter.shared.updateRoute()
+    }
+    
+    /// Beralih status PIN mode musik agar tidak hilang ke mode standby shalat
+    public func togglePin() {
+        self.isPinnedToMusic.toggle()
+        UserDefaults.standard.set(isPinnedToMusic, forKey: Self.pinnedMusicKey)
+        MusicIslandModule.shared.isPinned = self.isPinnedToMusic
+        if isPinnedToMusic {
+            GeneralSettings.shared.standbyMode = .music
+        } else {
+            GeneralSettings.shared.standbyMode = .smart
+        }
+        Task {
+            await pollActiveMedia()
+        }
     }
     
     // MARK: - Playback Controls
