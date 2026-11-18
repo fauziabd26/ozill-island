@@ -19,20 +19,40 @@ public struct IslandPillView: View {
             case .collapsed:
                 if router.currentMode == .music {
                     CollapsedMusicPill()
+                        .transition(.asymmetric(
+                            insertion: .opacity.combined(with: .scale(scale: 0.95)),
+                            removal: .opacity.combined(with: .scale(scale: 0.95))
+                        ))
                 } else {
                     CollapsedPrayerPill(vm: vm)
+                        .transition(.asymmetric(
+                            insertion: .opacity.combined(with: .scale(scale: 0.95)),
+                            removal: .opacity.combined(with: .scale(scale: 0.95))
+                        ))
                 }
             case .expanded:
                 if router.currentMode == .music {
                     ExpandedMusicSheet()
+                        .transition(.asymmetric(
+                            insertion: .opacity.combined(with: .scale(scale: 0.98)),
+                            removal: .opacity.combined(with: .scale(scale: 0.98))
+                        ))
                 } else {
                     ExpandedPrayerSheet(vm: vm)
+                        .transition(.asymmetric(
+                            insertion: .opacity.combined(with: .scale(scale: 0.98)),
+                            removal: .opacity.combined(with: .scale(scale: 0.98))
+                        ))
                 }
             case .settings:
                 PrayerSettingsSheet(vm: vm)
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .scale(scale: 0.98)),
+                        removal: .opacity.combined(with: .scale(scale: 0.98))
+                    ))
             }
         }
-        .animation(.spring(response: 0.35, dampingFraction: 0.82), value: vm.state)
-        .animation(.spring(response: 0.35, dampingFraction: 0.82), value: router.currentMode)
+        .animation(.spring(response: 0.38, dampingFraction: 0.82), value: vm.state)
+        .animation(.spring(response: 0.38, dampingFraction: 0.82), value: router.currentMode)
     }
 }

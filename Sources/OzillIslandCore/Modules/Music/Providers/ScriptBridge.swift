@@ -39,11 +39,15 @@ public enum ScriptBridge {
                             kill(pid, SIGKILL)
                         }
                     }
-                    try? outputPipe.fileHandleForReading.close()
-                    try? errorPipe.fileHandleForReading.close()
                     resumeOnce(success: false, output: "Execution timed out (\(timeout)s)")
                 }
                 timer.resume()
+                
+                defer {
+                    timer.cancel()
+                    try? outputPipe.fileHandleForReading.close()
+                    try? errorPipe.fileHandleForReading.close()
+                }
                 
                 do {
                     try process.run()
@@ -51,22 +55,17 @@ public enum ScriptBridge {
                     timer.cancel()
                     
                     let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
-                    try? outputPipe.fileHandleForReading.close()
                     let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                     
                     if process.terminationStatus == 0 {
-                        try? errorPipe.fileHandleForReading.close()
                         resumeOnce(success: true, output: output)
                     } else {
                         let errData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-                        try? errorPipe.fileHandleForReading.close()
                         let errStr = String(data: errData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                         resumeOnce(success: false, output: errStr.isEmpty ? output : errStr)
                     }
                 } catch {
                     timer.cancel()
-                    try? outputPipe.fileHandleForReading.close()
-                    try? errorPipe.fileHandleForReading.close()
                     resumeOnce(success: false, output: error.localizedDescription)
                 }
             }

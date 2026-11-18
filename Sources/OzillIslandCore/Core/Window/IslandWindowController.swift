@@ -7,6 +7,8 @@ public final class IslandWindowController: NSObject {
     
     private var panel: IslandPanel?
     private var hostingView: IslandHostingView<IslandPillView>?
+    private var globalClickMonitor: Any?
+    private var localClickMonitor: Any?
     
     public override init() {
         super.init()
@@ -42,6 +44,39 @@ public final class IslandWindowController: NSObject {
             name: NSApplication.didChangeScreenParametersNotification,
             object: nil
         )
+        
+        // Setup otomatis auto-collapse saat pengguna klik di luar island
+        setupClickOutsideMonitoring()
+    }
+    
+    private func setupClickOutsideMonitoring() {
+        if globalClickMonitor == nil {
+            globalClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.handlePotentialClickOutside()
+                }
+            }
+        }
+        if localClickMonitor == nil {
+            localClickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
+                Task { @MainActor [weak self] in
+                    self?.handlePotentialClickOutside()
+                }
+                return event
+            }
+        }
+    }
+    
+    private func handlePotentialClickOutside() {
+        guard let panel = panel else { return }
+        let currentState = PrayerIslandViewModel.shared.state
+        // Hanya auto-collapse jika sedang dalam state expanded atau settings
+        guard currentState != .collapsed else { return }
+        
+        let mouseLocation = NSEvent.mouseLocation
+        if !panel.frame.contains(mouseLocation) {
+            collapse()
+        }
     }
     
     /// Membuka langsung halaman Settings di floating island
@@ -90,8 +125,8 @@ public final class IslandWindowController: NSObject {
         
         if animated {
             NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.32
-                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                context.duration = 0.35
+                context.timingFunction = CAMediaTimingFunction(controlPoints: 0.16, 1.0, 0.3, 1.0)
                 context.allowsImplicitAnimation = true
                 panel.animator().setFrame(targetFrame, display: true)
             }

@@ -18,6 +18,7 @@ public final class UniversalMusicManager: ObservableObject {
     
     private var pollTimer: Timer?
     private var manualSelectedProviderId: String?
+    private var isPolling = false
     
     public init() {
         startPolling()
@@ -43,6 +44,10 @@ public final class UniversalMusicManager: ObservableObject {
     
     /// Polling berkala terhadap seluruh provider aktif untuk mendeteksi media playing secara instan
     public func pollActiveMedia() async {
+        guard !isPolling else { return }
+        isPolling = true
+        defer { isPolling = false }
+        
         var providers: [any MusicProvider] = [
             browserProvider,
             spotifyProvider,
