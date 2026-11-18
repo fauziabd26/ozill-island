@@ -2,12 +2,6 @@ import Foundation
 import SwiftUI
 import Combine
 
-public enum IslandState {
-    case collapsed
-    case expanded
-    case settings
-}
-
 @MainActor
 public final class PrayerIslandViewModel: ObservableObject {
     public static let shared = PrayerIslandViewModel()

@@ -6,6 +6,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     
     public func applicationDidFinishLaunching(_ notification: Notification) {
+        // Registrasi modul awal ke ModuleRegistry universal
+        do {
+            try ModuleRegistry.shared.register(PrayerIslandModule.shared)
+            try ModuleRegistry.shared.register(MusicIslandModule.shared)
+        } catch {
+            print("AppDelegate: Gagal registrasi modul awal -", error)
+        }
+        
         // Setup status item di macOS Menu Bar sebagai kontrol sekunder
         setupStatusItem()
         

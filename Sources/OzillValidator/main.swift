@@ -758,10 +758,225 @@ struct OzillValidatorApp {
             assert(theme.accentColor == .orange, "Setelah reset accent harus kembali ke orange")
         }
 
+        // Dummy module class untuk pengujian registry & router
+        final class TestModule: IslandModule {
+            let identifier: String
+            let displayName: String
+            var currentPriority: ModulePriority
+            var isAvailable: Bool
+            var capabilities: ModuleCapability
+            var associatedMode: IslandMode
+            var activateCount = 0
+            var deactivateCount = 0
+            
+            init(
+                identifier: String,
+                displayName: String,
+                priority: ModulePriority,
+                isAvailable: Bool = true,
+                capabilities: ModuleCapability = [.collapsedPill],
+                associatedMode: IslandMode = .idle
+            ) {
+                self.identifier = identifier
+                self.displayName = displayName
+                self.currentPriority = priority
+                self.isAvailable = isAvailable
+                self.capabilities = capabilities
+                self.associatedMode = associatedMode
+            }
+            
+            func activate() async { activateCount += 1 }
+            func deactivate() async { deactivateCount += 1 }
+        }
+
+        // Assertion 24: Module Registration, Lookup & Duplicate Prevention
+        runTest("ModuleRegistry: Registrasi, Lookup, Unregister, dan Pencegahan Duplikasi ID") {
+            let registry = ModuleRegistry()
+            let modA = TestModule(identifier: "test.battery", displayName: "Baterai", priority: .standby, associatedMode: .idle)
+            let modB = TestModule(identifier: "test.timer", displayName: "Timer", priority: .upcomingEvent, associatedMode: .banner)
+            
+            // 1. Registrasi berhasil
+            try registry.register(modA)
+            try registry.register(modB)
+            assert(registry.count == 2, "Harus ada 2 modul terdaftar")
+            
+            // 2. Lookup berhasil
+            assert(registry.module(for: "test.battery")?.displayName == "Baterai")
+            assert(registry.module(for: "test.timer")?.displayName == "Timer")
+            assert(registry.module(for: "test.nonexistent") == nil)
+            
+            // 3. Pencegahan duplikasi id
+            var duplicateCaught = false
+            do {
+                let duplicate = TestModule(identifier: "test.battery", displayName: "Baterai 2", priority: .critical)
+                try registry.register(duplicate)
+            } catch ModuleRegistryError.duplicateModule(let id) {
+                assert(id == "test.battery")
+                duplicateCaught = true
+            } catch {
+                fatalError("Tipe error tidak sesuai: \(error)")
+            }
+            assert(duplicateCaught, "Registrasi modul dengan id duplikat harus melempar error")
+            
+            // 4. Unregister
+            let removed = registry.unregister(identifier: "test.battery")
+            assert(removed?.identifier == "test.battery")
+            assert(registry.count == 1)
+            assert(registry.module(for: "test.battery") == nil)
+        }
+
+        // Assertion 25: Module Priority Hierarchical Sorting
+        runTest("ModuleRegistry: Pengurutan Modul Berdasarkan Prioritas Hierarkis") {
+            let registry = ModuleRegistry()
+            let mStandby = TestModule(identifier: "mod.standby", displayName: "Standby", priority: .standby)
+            let mCritical = TestModule(identifier: "mod.critical", displayName: "Critical", priority: .critical)
+            let mMedia = TestModule(identifier: "mod.media", displayName: "Media", priority: .activeMedia)
+            let mUpcoming = TestModule(identifier: "mod.upcoming", displayName: "Upcoming", priority: .upcomingEvent)
+            let mDisabled = TestModule(identifier: "mod.disabled", displayName: "Disabled", priority: ModulePriority(999), isAvailable: false)
+            
+            try registry.register(mStandby)
+            try registry.register(mCritical)
+            try registry.register(mMedia)
+            try registry.register(mUpcoming)
+            try registry.register(mDisabled)
+            
+            let sortedAvailable = registry.availableModulesSortedByPriority()
+            assert(sortedAvailable.count == 4, "Modul non-available tidak boleh masuk availableModulesSortedByPriority")
+            assert(sortedAvailable[0].identifier == "mod.critical", "Posisi 1 harus critical (100)")
+            assert(sortedAvailable[1].identifier == "mod.media", "Posisi 2 harus activeMedia (80)")
+            assert(sortedAvailable[2].identifier == "mod.upcoming", "Posisi 3 harus upcomingEvent (60)")
+            assert(sortedAvailable[3].identifier == "mod.standby", "Posisi 4 harus standby (40)")
+        }
+
+        // Assertion 26: GeneralSettings & StandbyMode Persistence
+        runTest("GeneralSettings: StandbyMode Configuration & UserDefaults Persistence") {
+            let settings = GeneralSettings()
+            
+            // 1. Reset baseline default
+            settings.resetToDefaults()
+            assert(settings.standbyMode == .smart, "Default standbyMode harus .smart")
+            
+            // 2. Ubah ke seluruh opsi StandbyMode dan verifikasi persistensi
+            let modes: [StandbyMode] = [.clock, .prayer, .music, .battery, .calendar, .minimal, .smart]
+            for mode in modes {
+                settings.standbyMode = mode
+                assert(settings.standbyMode == mode)
+                let saved = UserDefaults.standard.string(forKey: GeneralSettings.standbyModeKey)
+                assert(saved == mode.rawValue, "UserDefaults harus menyimpan \(mode.rawValue)")
+            }
+            
+            // 3. Kembalikan ke .smart
+            settings.resetToDefaults()
+            assert(settings.standbyMode == .smart)
+        }
+
+        // Assertion 27: IslandModeRouter Priority Resolution & Anti-Flapping
+        await runAsyncTest("IslandModeRouter: Resolusi Prioritas Deterministik & Anti-Flapping") {
+            let registry = ModuleRegistry()
+            let settings = GeneralSettings()
+            settings.standbyMode = .smart
+            
+            let prayerMod = TestModule(identifier: "org.ozill.prayer", displayName: "Prayer", priority: .standby, associatedMode: .prayer)
+            let musicMod = TestModule(identifier: "org.ozill.music", displayName: "Music", priority: .activeMedia, associatedMode: .music)
+            let criticalMod = TestModule(identifier: "org.ozill.emergency", displayName: "Alert", priority: .critical, associatedMode: .banner)
+            
+            try registry.register(prayerMod)
+            try registry.register(musicMod)
+            try registry.register(criticalMod)
+            
+            let router = IslandModeRouter(registry: registry, settings: settings)
+            
+            // 1. Critical event (Alert) mengalahkan Music & Prayer
+            let (m1, mod1) = await router.updateRoute()
+            assert(m1 == .banner, "Harus memilih mode banner untuk critical alert")
+            assert(mod1?.identifier == "org.ozill.emergency")
+            assert(criticalMod.activateCount == 1)
+            
+            // 2. Anti-flapping test: updateRoute berulang dengan state identik tidak memicu re-activation
+            let (m2, mod2) = await router.updateRoute()
+            assert(m2 == .banner)
+            assert(mod2?.identifier == "org.ozill.emergency")
+            assert(criticalMod.activateCount == 1, "Anti-flapping: activate tidak boleh dipanggil ganda jika mode sama")
+            
+            // 3. Matikan critical alert -> Music (activeMedia, 80) harus naik menjadi aktif
+            criticalMod.isAvailable = false
+            let (m3, mod3) = await router.updateRoute()
+            assert(m3 == .music, "Ketika critical berakhir, musik yang sedang aktif harus mengambil alih")
+            assert(mod3?.identifier == "org.ozill.music")
+            assert(criticalMod.deactivateCount == 1, "Modul lama harus di-deactivate")
+            assert(musicMod.activateCount == 1, "Modul baru harus di-activate")
+            
+            // 4. Matikan musik -> Fallback ke standby mode (Prayer)
+            musicMod.isAvailable = false
+            let (m4, mod4) = await router.updateRoute()
+            assert(m4 == .prayer, "Fallback harus ke prayer yang standby")
+            assert(mod4?.identifier == "org.ozill.prayer")
+        }
+
+        // Assertion 28: MockMusicProvider Playback, Capabilities & Unavailable Handling
+        await runAsyncTest("MockMusicProvider: Simulasi Playback, Siklus Trek, dan Kontrol Kapabilitas") {
+            let mock = MockMusicProvider(
+                identifier: "test.mock.player",
+                displayName: "Test Player",
+                isAvailable: true,
+                capabilities: [.playPause, .skipNext] // tanpa skipPrevious
+            )
+            
+            // 1. Snapshot awal
+            let snap1 = await mock.fetchSnapshot()
+            assert(snap1 != nil, "Snapshot awal harus ada")
+            assert(snap1?.title == "Starboy")
+            assert(snap1?.artist == "The Weeknd ft. Daft Punk")
+            let state1 = await mock.fetchPlaybackState()
+            assert(state1 == .paused)
+            
+            // 2. Play / Pause
+            try await mock.playPause()
+            let statePlay = await mock.fetchPlaybackState()
+            assert(statePlay == .playing, "State harus .playing setelah playPause()")
+            try await mock.playPause()
+            let statePause = await mock.fetchPlaybackState()
+            assert(statePause == .paused, "State harus .paused setelah playPause() kedua")
+            
+            // 3. Skip Next
+            try await mock.next()
+            let snap2 = await mock.fetchSnapshot()
+            assert(snap2?.title == "Blinding Lights", "Trek harus maju ke Blinding Lights")
+            let stateNext = await mock.fetchPlaybackState()
+            assert(stateNext == .playing, "State otomatis playing saat next track")
+            
+            // 4. Kapabilitas yang tidak didukung harus melempar error
+            var unsupportedCaught = false
+            do {
+                try await mock.previous()
+            } catch MusicProviderError.unsupportedAction(let action) {
+                assert(action == "skipPrevious")
+                unsupportedCaught = true
+            } catch {
+                fatalError("Error tidak sesuai: \(error)")
+            }
+            assert(unsupportedCaught, "Memanggil previous pada provider tanpa kapabilitas skipPrevious harus melempar error")
+            
+            // 5. Provider Unavailable handling
+            mock.setAvailable(false)
+            let snapUnavailable = await mock.fetchSnapshot()
+            assert(snapUnavailable == nil, "Snapshot harus nil saat provider unavailable")
+            
+            var unavailableCaught = false
+            do {
+                try await mock.playPause()
+            } catch MusicProviderError.providerUnavailable {
+                unavailableCaught = true
+            } catch {
+                fatalError("Error tidak sesuai: \(error)")
+            }
+            assert(unavailableCaught, "Kontrol pada provider unavailable harus melempar error")
+        }
+
         print("""
 
         ================================================================================
-           HASIL FINAL HARDENING & UI POLISH VALIDATION:
+           HASIL FINAL FASE 1 — MODULAR HUB & MUSIC FOUNDATION VALIDATION:
            1. Magic numbers (86400, 15, 45) diganti konstanta bernama bertipe TimeInterval.
            2. Deduplikasi Adzan diperkuat menggunakan Set<String> dengan pemangkasan memori.
            3. Sleep/Wake mencatat MissedPrayerOccurrence terstruktur (nama, waktu, zona).
@@ -771,7 +986,12 @@ struct OzillValidatorApp {
            7. Error add notifikasi tercatat transparan dan dibatasi max 50 riwayat.
            8. Transisi IslandState deterministik dan idempoten (Assertion 22 PASS).
            9. Centralized Theme Engine, 5 presets, accent picker & custom hex parser tervalidasi (Assertion 23 PASS).
-           10. Seluruh 23 Automated Validation Assertions BERHASIL (PASS).
+           10. ModuleRegistry: Registrasi, lookup, unregister, duplicate prevention (Assertion 24 PASS).
+           11. ModulePriority: Pengurutan hierarkis modul 100 s/d 20 (Assertion 25 PASS).
+           12. GeneralSettings & StandbyMode: 7 varian standby & persistensi UserDefaults (Assertion 26 PASS).
+           13. IslandModeRouter: Resolusi prioritas deterministik & anti-flapping (Assertion 27 PASS).
+           14. MockMusicProvider: Simulasi playback, cycling, capabilities & error handling (Assertion 28 PASS).
+           15. Seluruh 28 Automated Validation Assertions BERHASIL (PASS).
         ================================================================================
         """)
     }
