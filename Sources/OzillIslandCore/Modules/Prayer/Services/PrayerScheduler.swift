@@ -16,10 +16,11 @@ public final class PrayerScheduler: ObservableObject {
     
     private let calculator = PrayerCalculator()
     private var timer: Timer?
-    private var lastCalculatedDay: Int = -1
+    private var lastCalculatedDateComponents: DateComponents?
     private var cancellables = Set<AnyCancellable>()
     private var lastTriggeredPrayerForAdhan: String?
     private var lastActiveTime: Date = Date()
+    private var isInitialLaunch: Bool = true
     private var observerTokens: [NSObjectProtocol] = []
     
     public init() {
@@ -41,10 +42,11 @@ public final class PrayerScheduler: ObservableObject {
     }
     
     private func setupSubscriptions() {
-        // 1. Pantau perubahan lokasi
+        // 1. Pantau perubahan lokasi dan timezone
         LocationManager.shared.$latitude
             .combineLatest(LocationManager.shared.$longitude, LocationManager.shared.$currentTimeZone)
             .sink { [weak self] lat, lon, tz in
+                self?.lastCalculatedDateComponents = nil
                 self?.recalculate(latitude: lat, longitude: lon, timeZone: tz)
             }
             .store(in: &cancellables)
@@ -84,7 +86,7 @@ public final class PrayerScheduler: ObservableObject {
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
-                self.lastCalculatedDay = -1
+                self.lastCalculatedDateComponents = nil
                 self.recalculate(
                     latitude: LocationManager.shared.latitude,
                     longitude: LocationManager.shared.longitude,
@@ -102,7 +104,7 @@ public final class PrayerScheduler: ObservableObject {
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
-                self.lastCalculatedDay = -1
+                self.lastCalculatedDateComponents = nil
                 self.recalculate(
                     latitude: LocationManager.shared.latitude,
                     longitude: LocationManager.shared.longitude,
@@ -113,76 +115,137 @@ public final class PrayerScheduler: ObservableObject {
         observerTokens.append(clockChangeToken)
     }
     
-    /// Dipanggil saat Mac bangun dari sleep:
-    /// - Menghindari pemutaran audio adzan yang mengejutkan secara retroaktif.
-    /// - Mengidentifikasi apakah ada waktu shalat yang terlewati saat Mac dalam keadaan sleep.
-    /// - Menampilkan notifikasi pemberitahuan sopan jika ada shalat yang terlewati.
-    private func handleWakeFromSleep() {
+    /// Menangani peristiwa saat Mac bangun dari sleep:
+    /// - Mengaudit rentang sleep bahkan jika melintasi tengah malam.
+    /// - Mencegah pemutaran audio adzan secara retroaktif untuk shalat yang telah lewat.
+    /// - Mencegah false banner saat aplikasi baru pertama kali dijalankan.
+    /// - Menerapkan kebijakan sopan jika Mac tidur lebih dari 24 jam.
+    public func handleWakeFromSleep() {
         let now = Date()
         let sleepStartTime = lastActiveTime
         lastActiveTime = now
         
-        if let currentSched = self.schedule {
-            var missedPrayers: [PrayerName] = []
-            let calendar = Calendar.current
-            
-            for prayer in PrayerName.fardhuPrayers {
-                let prayerTime = currentSched.time(for: prayer)
-                // Jika waktu shalat jatuh di rentang waktu Mac sedang tidur
-                if prayerTime > sleepStartTime && prayerTime <= now {
-                    missedPrayers.append(prayer)
-                    // Tandai agar tidak memicu pemutaran audio adzan tiba-tiba
-                    let comp = calendar.dateComponents([.year, .month, .day], from: prayerTime)
-                    let triggerKey = "\(prayer.rawValue)-\(comp.year ?? 0)-\(comp.month ?? 0)-\(comp.day ?? 0)"
-                    self.lastTriggeredPrayerForAdhan = triggerKey
+        // Abaikan jika initial launch atau jam sistem mundur
+        guard !isInitialLaunch, sleepStartTime <= now else {
+            isInitialLaunch = false
+            recalculate(
+                latitude: LocationManager.shared.latitude,
+                longitude: LocationManager.shared.longitude,
+                timeZone: LocationManager.shared.currentTimeZone
+            )
+            return
+        }
+        
+        let elapsed = now.timeIntervalSince(sleepStartTime)
+        // Jika sleep sangat singkat (< 15 detik), tidak perlu analisis missed prayer
+        guard elapsed >= 15 else {
+            recalculate(
+                latitude: LocationManager.shared.latitude,
+                longitude: LocationManager.shared.longitude,
+                timeZone: LocationManager.shared.currentTimeZone
+            )
+            return
+        }
+        
+        let tz = LocationManager.shared.currentTimeZone
+        let lat = LocationManager.shared.latitude
+        let lon = LocationManager.shared.longitude
+        let cityName = LocationManager.shared.locationName
+        
+        // Kebijakan Durasi Tidur > 24 Jam (Multi-day sleep)
+        if elapsed > 86400 {
+            self.missedPrayerAlert = "Mac berada dalam mode tidur lebih dari 24 jam. Jadwal shalat telah diperbarui secara otomatis."
+            // Blacklist seluruh waktu shalat hari ini yang sudah lewat agar tidak memicu adzan
+            recalculate(latitude: lat, longitude: lon, timeZone: tz)
+            if let current = self.schedule {
+                var cal = Calendar(identifier: .gregorian)
+                cal.timeZone = tz
+                for prayer in PrayerName.fardhuPrayers {
+                    let pTime = current.time(for: prayer)
+                    if pTime <= now {
+                        let comp = cal.dateComponents([.year, .month, .day], from: pTime)
+                        let triggerKey = "\(prayer.rawValue)-\(comp.year ?? 0)-\(comp.month ?? 0)-\(comp.day ?? 0)"
+                        self.lastTriggeredPrayerForAdhan = triggerKey
+                    }
                 }
             }
+            return
+        }
+        
+        // Durasi tidur <= 24 Jam: Periksa hari-hari yang dilintasi antara sleepStartTime dan now
+        var missedPrayers: [PrayerName] = []
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = tz
+        
+        // Kumpulkan tanggal-tanggal unik yang dilintasi
+        var checkDates: [Date] = [sleepStartTime]
+        let startDay = cal.startOfDay(for: sleepStartTime)
+        let endDay = cal.startOfDay(for: now)
+        if startDay != endDay {
+            checkDates.append(now)
+        }
+        
+        for d in checkDates {
+            var adjustments: [PrayerName: Int] = [:]
+            for name in PrayerName.allCases {
+                let (adj, _, _) = PrayerSettings.shared.effectiveAdjustment(for: name, cityName: cityName, date: d, timeZone: tz)
+                adjustments[name] = adj
+            }
             
-            if let lastMissed = missedPrayers.last {
-                let formatter = DateFormatter()
-                formatter.dateFormat = "HH:mm"
-                formatter.timeZone = LocationManager.shared.currentTimeZone
-                let timeStr = formatter.string(from: currentSched.time(for: lastMissed))
-                self.missedPrayerAlert = "Waktu \(lastMissed.rawValue) telah masuk saat Mac berada dalam mode tidur (\(timeStr))."
+            if let sched = calculator.calculate(latitude: lat, longitude: lon, date: d, timeZone: tz, adjustments: adjustments) {
+                for prayer in PrayerName.fardhuPrayers {
+                    let pTime = sched.time(for: prayer)
+                    if pTime > sleepStartTime && pTime <= now {
+                        missedPrayers.append(prayer)
+                        // Blacklist secara ketat dari pemicu adzan retroaktif
+                        let comp = cal.dateComponents([.year, .month, .day], from: pTime)
+                        let triggerKey = "\(prayer.rawValue)-\(comp.year ?? 0)-\(comp.month ?? 0)-\(comp.day ?? 0)"
+                        self.lastTriggeredPrayerForAdhan = triggerKey
+                    }
+                }
             }
         }
         
-        recalculate(
-            latitude: LocationManager.shared.latitude,
-            longitude: LocationManager.shared.longitude,
-            timeZone: LocationManager.shared.currentTimeZone
-        )
+        if !missedPrayers.isEmpty {
+            let names = missedPrayers.map(\.rawValue).joined(separator: ", ")
+            self.missedPrayerAlert = "Waktu \(names) telah masuk saat Mac berada dalam mode tidur."
+        }
+        
+        recalculate(latitude: lat, longitude: lon, timeZone: tz)
     }
     
     public func recalculate(latitude: Double, longitude: Double, timeZone: TimeZone) {
-        var adjustments: [PrayerName: Int] = [:]
         let cityName = LocationManager.shared.locationName
-        for name in PrayerName.allCases {
-            let (adj, _) = PrayerSettings.shared.effectiveAdjustment(for: name, cityName: cityName)
-            adjustments[name] = adj
-        }
-        
         let now = Date()
         
-        // 1. Jadwal Hari Ini
+        // 1. Penyesuaian Hari Ini
+        var todayAdjustments: [PrayerName: Int] = [:]
+        for name in PrayerName.allCases {
+            let (adj, _, _) = PrayerSettings.shared.effectiveAdjustment(for: name, cityName: cityName, date: now, timeZone: timeZone)
+            todayAdjustments[name] = adj
+        }
+        
         let todaySched = calculator.calculate(
             latitude: latitude,
             longitude: longitude,
             date: now,
             timeZone: timeZone,
-            adjustments: adjustments
+            adjustments: todayAdjustments
         )
         
-        // 2. Jadwal Hari Besok (Dihitung astronomis independen tanpa konstanta 86400)
+        // 2. Penyesuaian Hari Besok
+        // Bersih dari magic numbers dan fallback now:
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
-        let tomorrowDate: Date
-        if let nextDay = calendar.date(byAdding: .day, value: 1, to: now) {
-            tomorrowDate = nextDay
-        } else {
-            var comp = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: now)
-            comp.day = (comp.day ?? 1) + 1
-            tomorrowDate = calendar.date(from: comp) ?? now
+        guard let tomorrowDate = calendar.date(byAdding: .day, value: 1, to: now) else {
+            assertionFailure("Fatal: Gagal menghitung tomorrowDate dari \(now) dengan timezone \(timeZone.identifier)")
+            return
+        }
+        
+        var tomorrowAdjustments: [PrayerName: Int] = [:]
+        for name in PrayerName.allCases {
+            let (adj, _, _) = PrayerSettings.shared.effectiveAdjustment(for: name, cityName: cityName, date: tomorrowDate, timeZone: timeZone)
+            tomorrowAdjustments[name] = adj
         }
         
         let tomorrowSched = calculator.calculate(
@@ -190,7 +253,7 @@ public final class PrayerScheduler: ObservableObject {
             longitude: longitude,
             date: tomorrowDate,
             timeZone: timeZone,
-            adjustments: adjustments
+            adjustments: tomorrowAdjustments
         )
         
         self.schedule = todaySched
@@ -213,7 +276,7 @@ public final class PrayerScheduler: ObservableObject {
     
     private func startTimer() {
         timer?.invalidate()
-        // Timer 1 detik untuk countdown dan update waktu aktif
+        // Timer 1 detik untuk countdown yang presisi dan deteksi trigger adzan
         timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.tick()
@@ -224,21 +287,24 @@ public final class PrayerScheduler: ObservableObject {
     private func tick() {
         let now = Date()
         lastActiveTime = now
+        isInitialLaunch = false
         
-        let calendar = Calendar.current
-        let currentDay = calendar.component(.day, from: now)
+        let tz = LocationManager.shared.currentTimeZone
+        var locationCalendar = Calendar(identifier: .gregorian)
+        locationCalendar.timeZone = tz
+        let currentDayComponents = locationCalendar.dateComponents([.year, .month, .day], from: now)
         
-        // Cek pergantian hari (midnight rollover)
-        if lastCalculatedDay != -1 && currentDay != lastCalculatedDay {
-            lastCalculatedDay = currentDay
+        // Deteksi pergantian hari kalender di timezone lokasi shalat (bukan hanya jam Mac lokal)
+        if let last = lastCalculatedDateComponents, last != currentDayComponents {
+            lastCalculatedDateComponents = currentDayComponents
             recalculate(
                 latitude: LocationManager.shared.latitude,
                 longitude: LocationManager.shared.longitude,
-                timeZone: LocationManager.shared.currentTimeZone
+                timeZone: tz
             )
             return
         }
-        lastCalculatedDay = currentDay
+        lastCalculatedDateComponents = currentDayComponents
         
         updateNextPrayer()
         checkAdhanTrigger(now: now)
@@ -270,7 +336,9 @@ public final class PrayerScheduler: ObservableObject {
     /// Hanya memicu jika berada dalam jendela toleransi [0 ..< 45 detik] dari waktu masuk shalat.
     private func checkAdhanTrigger(now: Date) {
         guard let schedule = schedule else { return }
-        let calendar = Calendar.current
+        let tz = LocationManager.shared.currentTimeZone
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = tz
         let nowComponents = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: now)
         
         for prayer in PrayerName.fardhuPrayers {

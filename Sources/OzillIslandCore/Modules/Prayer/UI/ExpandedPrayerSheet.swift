@@ -196,7 +196,7 @@ public struct ExpandedPrayerSheet: View {
             
             // Footer note
             HStack {
-                Text("Kemenag RI (Subuh 20°, Isya 18°, Syafi'i) • Perhitungan Offline")
+                Text("Hisab Falak (Subuh 20°, Isya 18°, Syafi'i) • Perhitungan Offline")
                     .font(.system(size: 9))
                     .foregroundColor(.white.opacity(0.35))
                 Spacer()

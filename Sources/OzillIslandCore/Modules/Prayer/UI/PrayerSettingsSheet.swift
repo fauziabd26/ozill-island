@@ -66,22 +66,27 @@ public struct PrayerSettingsSheet: View {
                             Group {
                                 switch settings.ihtiyatiPolicy {
                                 case .pureAstronomical:
-                                    Text("Hisab astronomis murni tanpa ihtiyati (offset 0 menit). Koreksi manual dinonaktifkan.")
+                                    Text("Hisab astronomis murni tanpa ihtiyati (Offset 0 menit). Koreksi manual dinonaktifkan.")
                                         .foregroundColor(.cyan.opacity(0.9))
                                         
-                                case .sihatReference:
-                                    let (_, isCalibrated) = settings.effectiveAdjustment(for: .fajr, cityName: vm.locationManager.locationName)
+                                case .custom:
+                                    Text("Menggunakan koreksi manual pengguna (-5 s/d +5 menit) dari hasil hisab mentah.")
+                                        .foregroundColor(.orange.opacity(0.9))
+                                        
+                                case .experimentalSihatSnapshot:
+                                    let (_, isCalibrated, desc) = settings.effectiveAdjustment(
+                                        for: .fajr,
+                                        cityName: vm.locationManager.locationName,
+                                        date: Date(),
+                                        timeZone: vm.locationManager.currentTimeZone
+                                    )
                                     if isCalibrated {
-                                        Text("Kalibrasi referensi SIHAT Kemenag aktif untuk \(vm.locationManager.locationName).")
+                                        Text("✅ " + desc)
                                             .foregroundColor(.green.opacity(0.9))
                                     } else {
-                                        Text("⚠️ Kalibrasi khusus \(vm.locationManager.locationName) belum tersedia. Menggunakan hisab murni astronomis.")
+                                        Text("⚠️ " + desc)
                                             .foregroundColor(.yellow.opacity(0.9))
                                     }
-                                    
-                                case .custom:
-                                    Text("Menggunakan koreksi manual pengguna (-5 s/d +5 menit) dari hisab astronomis.")
-                                        .foregroundColor(.orange.opacity(0.9))
                                 }
                             }
                             .font(.system(size: 9.5))
@@ -93,7 +98,12 @@ public struct PrayerSettingsSheet: View {
                         // Per-Prayer Config
                         ForEach(PrayerName.fardhuPrayers) { prayer in
                             let pref = settings.preferences[prayer] ?? PrayerPreference()
-                            let (totalAdj, _) = settings.effectiveAdjustment(for: prayer, cityName: vm.locationManager.locationName)
+                            let (totalAdj, _, _) = settings.effectiveAdjustment(
+                                for: prayer,
+                                cityName: vm.locationManager.locationName,
+                                date: Date(),
+                                timeZone: vm.locationManager.currentTimeZone
+                            )
                             let totalAdjSign = totalAdj > 0 ? "+\(totalAdj)" : "\(totalAdj)"
                             let isPure = settings.ihtiyatiPolicy == .pureAstronomical
                             
