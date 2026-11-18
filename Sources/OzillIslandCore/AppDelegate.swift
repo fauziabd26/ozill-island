@@ -13,12 +13,17 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             try ModuleRegistry.shared.register(PrayerIslandModule.shared)
             try ModuleRegistry.shared.register(MusicIslandModule.shared)
             try ModuleRegistry.shared.register(TimerIslandModule.shared)
+            try ModuleRegistry.shared.register(NotificationIslandModule.shared)
         } catch {
             print("AppDelegate: Gagal registrasi modul awal -", error)
         }
         
         // Mulai pemantauan media otomatis di latar belakang
         _ = UniversalMusicManager.shared
+        
+        // Jalur A & Jalur B: Pemantau notifikasi sistem macOS & browser web
+        AXNotificationListener.shared.startListening()
+        BrowserNotificationWatcher.shared.startWatching()
         
         // Setup status item di macOS Menu Bar sebagai kontrol sekunder
         setupStatusItem()

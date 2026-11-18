@@ -110,6 +110,17 @@ public final class TimerService: ObservableObject {
         state = .completed
         NSSound.beep()
         
+        NotificationIslandService.shared.postNotification(
+            IslandNotification(
+                appName: "Focus Timer",
+                title: "Waktu Fokus Selesai! 🎉",
+                message: "Sesi \(currentPreset.rawValue) telah berakhir. Istirahat sejenak ☕",
+                iconSymbol: "timer",
+                accentHex: "#FF9500",
+                duration: 6.0
+            )
+        )
+        
         // Auto-dismiss alert after 10 seconds jika tidak di-reset
         completionAlertTimer?.invalidate()
         completionAlertTimer = Timer.scheduledTimer(withTimeInterval: 10.0, repeats: false) { [weak self] _ in

@@ -1280,19 +1280,54 @@ struct OzillValidatorApp {
             // Di lingkungan terminal/debug non-installed app, launchMgr membaca status tanpa crash
             assert(launchMgr.isEnabled == true || launchMgr.isEnabled == false)
             
-            // Pastikan ModuleRegistry menampung 3 modul terintegrasi
+            // Pastikan ModuleRegistry menampung 4 modul terintegrasi
             let reg = ModuleRegistry()
             try! reg.register(PrayerIslandModule.shared)
             try! reg.register(MusicIslandModule.shared)
             try! reg.register(TimerIslandModule.shared)
-            assert(reg.count == 3, "ModuleRegistry harus menampung Prayer, Music, dan Timer")
+            try! reg.register(NotificationIslandModule.shared)
+            assert(reg.count == 4, "ModuleRegistry harus menampung Prayer, Music, Timer, dan Notification")
             assert(reg.module(for: "org.ozill.timer") != nil, "Timer module harus terdaftar di registry")
+            assert(reg.module(for: "org.ozill.notification") != nil, "Notification module harus terdaftar di registry")
+        }
+
+        // Assertion 39: Universal Notification Island Service & Multi-Track Integration (Jalur A, B, C)
+        runTest("Universal Notification Island: Integrasi Jalur A, B, dan C & Prioritas Banner") {
+            let notifService = NotificationIslandService()
+            let notifMod = NotificationIslandModule(notifService: notifService)
+            
+            // 1. Kondisi awal: tidak ada notifikasi aktif
+            assert(notifService.activeNotification == nil)
+            assert(notifMod.currentPriority == .background)
+            
+            // 2. Terbitkan notifikasi WhatsApp (Jalur A / Jalur B)
+            let testWA = IslandNotification(
+                appName: "WhatsApp",
+                title: "Budi Santoso",
+                message: "Cuy, file desainnya udah gue kirim ya!",
+                iconSymbol: "message.fill",
+                accentHex: "#25D366",
+                duration: 4.5
+            )
+            notifService.postNotification(testWA)
+            
+            // 3. Verifikasi banner aktif & prioritas kritis (100)
+            assert(notifService.activeNotification?.id == testWA.id)
+            assert(notifService.activeNotification?.appName == "WhatsApp")
+            assert(notifService.activeNotification?.accentHex == "#25D366")
+            assert(notifMod.currentPriority == .critical, "Notifikasi aktif harus memiliki prioritas kritis untuk tampil di Island")
+            assert(notifService.recentNotifications.contains(where: { $0.id == testWA.id }))
+            
+            // 4. Dismiss notifikasi
+            notifService.dismissActiveNotification()
+            assert(notifService.activeNotification == nil, "Dismiss harus mengembalikan activeNotification ke nil")
+            assert(notifMod.currentPriority == .background)
         }
 
         print("""
 
         ================================================================================
-           HASIL FINAL FASE 2 + HARDENING ABCD VALIDATION:
+           HASIL FINAL FASE 2 + HARDENING ABCD + NOTIFICATION ISLAND VALIDATION:
            1. Magic numbers (86400, 15, 45) diganti konstanta bernama bertipe TimeInterval.
            2. Deduplikasi Adzan diperkuat menggunakan Set<String> dengan pemangkasan memori.
            3. Sleep/Wake mencatat MissedPrayerOccurrence terstruktur (nama, waktu, zona).
@@ -1317,7 +1352,8 @@ struct OzillValidatorApp {
            22. Item B: Focus / Pomodoro Timer State Engine, Presets & Priority (Assertion 36 PASS).
            23. Item C: Smart Battery Alert (<= 15%) & 3.5s Charger Animation (Assertion 37 PASS).
            24. Item D: Launch at Login Manager & Global Shortcut Registration (Assertion 38 PASS).
-           25. Seluruh 38 Automated Validation Assertions BERHASIL (PASS).
+           25. Universal Notification Island: Integrasi Jalur A (AXObserver), B (Browser Web), C (Sistem) (Assertion 39 PASS).
+           26. Seluruh 39 Automated Validation Assertions BERHASIL (PASS).
         ================================================================================
         """)
     }

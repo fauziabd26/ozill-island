@@ -5,6 +5,7 @@ public struct SystemInfoSheet: View {
     @ObservedObject private var sys = SystemInfoService.shared
     @ObservedObject private var theme = IslandThemeManager.shared
     @ObservedObject private var prayerVM = PrayerIslandViewModel.shared
+    @ObservedObject private var notifService = NotificationIslandService.shared
     
     public init() {}
     
@@ -109,6 +110,46 @@ public struct SystemInfoSheet: View {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(palette.cardBackground)
             )
+            
+            // Riwayat Notifikasi Terakhir
+            if let latest = notifService.recentNotifications.first {
+                HStack(spacing: 8) {
+                    ZStack {
+                        Circle()
+                            .fill(latest.accentColor.opacity(0.2))
+                            .frame(width: 22, height: 22)
+                        Image(systemName: latest.iconSymbol)
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(latest.accentColor)
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 1) {
+                        HStack(spacing: 4) {
+                            Text(latest.appName.uppercased())
+                                .font(.system(size: 8, weight: .heavy))
+                                .foregroundColor(latest.accentColor)
+                            Text("•")
+                                .font(.system(size: 6))
+                                .foregroundColor(palette.secondaryText.opacity(0.5))
+                            Text(latest.title)
+                                .font(.system(size: 10.5, weight: .bold))
+                                .foregroundColor(palette.primaryText)
+                                .lineLimit(1)
+                        }
+                        
+                        Text(latest.message)
+                            .font(.system(size: 9.5))
+                            .foregroundColor(palette.secondaryText)
+                            .lineLimit(1)
+                    }
+                    Spacer()
+                }
+                .padding(8)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(palette.cardBackground)
+                )
+            }
         }
     }
 }

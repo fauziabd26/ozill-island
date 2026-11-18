@@ -7,6 +7,7 @@ public struct PrayerSettingsSheet: View {
     @ObservedObject private var launchManager = LaunchAtLoginManager.shared
     @ObservedObject private var sys = SystemInfoService.shared
     @ObservedObject private var musicManager = UniversalMusicManager.shared
+    @ObservedObject private var notifService = NotificationIslandService.shared
     @State private var selectedTab: Int = 0
     @State private var customHexInput: String = ""
     
@@ -474,6 +475,79 @@ public struct PrayerSettingsSheet: View {
                     .cornerRadius(7)
                 }
                 .buttonStyle(PlainButtonStyle())
+                
+                // Universal Notification Controls (Jalur A, B, C)
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("Notifikasi Aplikasi (WA, IG, dsb)")
+                                .font(.system(size: 11.5, weight: .semibold))
+                                .foregroundColor(palette.primaryText)
+                            Text(notifService.isAccessibilityAuthorized ? "Izin Aksesibilitas: Aktif ✅" : "Izin Aksesibilitas: Belum Aktif ⚠️")
+                                .font(.system(size: 9.5))
+                                .foregroundColor(notifService.isAccessibilityAuthorized ? .green : .orange)
+                        }
+                        Spacer()
+                        if !notifService.isAccessibilityAuthorized {
+                            Button("Beri Izin") {
+                                notifService.requestAccessibilityPermission()
+                            }
+                            .font(.system(size: 9.5, weight: .bold))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3.5)
+                            .background(accent.opacity(0.18))
+                            .foregroundColor(accent)
+                            .cornerRadius(6)
+                        }
+                    }
+                    
+                    // Tombol Uji Notifikasi
+                    HStack(spacing: 6) {
+                        Button("🧪 Tes WA") {
+                            vm.collapse()
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                                notifService.simulateNotification(type: "whatsapp")
+                            }
+                        }
+                        .font(.system(size: 9.5, weight: .semibold))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3.5)
+                        .background(Color.green.opacity(0.15))
+                        .foregroundColor(.green)
+                        .cornerRadius(6)
+                        
+                        Button("🧪 Tes IG") {
+                            vm.collapse()
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                                notifService.simulateNotification(type: "instagram")
+                            }
+                        }
+                        .font(.system(size: 9.5, weight: .semibold))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3.5)
+                        .background(Color.pink.opacity(0.15))
+                        .foregroundColor(.pink)
+                        .cornerRadius(6)
+                        
+                        Button("🧪 Tes Telegram") {
+                            vm.collapse()
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                                notifService.simulateNotification(type: "telegram")
+                            }
+                        }
+                        .font(.system(size: 9.5, weight: .semibold))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3.5)
+                        .background(Color.blue.opacity(0.15))
+                        .foregroundColor(.blue)
+                        .cornerRadius(6)
+                    }
+                }
+                .padding(8)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(palette.cardBackground)
+                )
             }
         }
     }
