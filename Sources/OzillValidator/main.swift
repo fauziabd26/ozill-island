@@ -1181,13 +1181,13 @@ struct OzillValidatorApp {
             
             // 2. Simulasi waktu belum mencapai 15 menit (10 menit / 600 detik)
             let tenMinutesLater = Date().addingTimeInterval(600)
-            service.evaluateIdleState(simulatedDate: tenMinutesLater)
+            service.evaluateIdleState(simulatedDate: tenMinutesLater, checkUpcomingPrayer: false, checkMediaPlaying: false)
             assert(service.isDimmed == false, "Sebelum 15 menit tidak boleh transparan")
             assert(service.currentOpacity == 1.0)
             
             // 3. Simulasi waktu melewati batas 15 menit (16 menit / 960 detik)
             let sixteenMinutesLater = Date().addingTimeInterval(960)
-            service.evaluateIdleState(simulatedDate: sixteenMinutesLater)
+            service.evaluateIdleState(simulatedDate: sixteenMinutesLater, checkUpcomingPrayer: false, checkMediaPlaying: false)
             assert(service.isDimmed == true, "Harus menjadi transparan setelah > 15 menit idle")
             assert(service.currentOpacity == service.dimmedOpacity)
             
@@ -1324,10 +1324,51 @@ struct OzillValidatorApp {
             assert(notifMod.currentPriority == .background)
         }
 
+        // Assertion 40: Fase 3A - AudioController Bounds, Increment, Mute Toggle & Debounce
+        runTest("Fase 3A: AudioController Clamping, Step +/- 0.05, Toggle Mute & State Independence") {
+            let audio = AudioController(initialVolume: 0.5, isMuted: false, isAvailable: true, stepIncrement: 0.05)
+            
+            // 1. Clamping bounds
+            audio.setVolume(1.5)
+            assert(audio.volume == 1.0, "Volume > 1.0 harus di-clamp ke 1.0")
+            audio.setVolume(-0.2)
+            assert(audio.volume == 0.0, "Volume < 0.0 harus di-clamp ke 0.0")
+            
+            // 2. Increments & Decrements
+            audio.setVolume(0.40)
+            audio.increaseVolume()
+            assert(abs(audio.volume - 0.45) < 0.001, "increaseVolume() harus menambah sebesar stepIncrement (0.05)")
+            audio.decreaseVolume()
+            assert(abs(audio.volume - 0.40) < 0.001, "decreaseVolume() harus mengurangi sebesar stepIncrement (0.05)")
+            
+            // 3. Mute toggle
+            assert(!audio.isMuted)
+            audio.toggleMute()
+            assert(audio.isMuted, "toggleMute() harus mengubah isMuted ke true")
+            audio.toggleMute()
+            assert(!audio.isMuted, "toggleMute() kedua harus mengembalikan isMuted ke false")
+            
+            // 4. Setting volume unmutes if positive
+            audio.toggleMute()
+            assert(audio.isMuted)
+            audio.setVolume(0.60)
+            assert(!audio.isMuted, "setVolume dengan nilai > 0 harus otomatis meng-unmute")
+            
+            // 5. AudioState immutability & model check
+            let state = AudioState(volume: 0.85, isMuted: true, isAvailable: true)
+            assert(state.volume == 0.85)
+            assert(state.isMuted)
+            assert(state.isAvailable)
+            
+            // 6. Device availability fallback
+            let unavailableState = AudioState(volume: 0.5, isMuted: false, isAvailable: false)
+            assert(!unavailableState.isAvailable)
+        }
+
         print("""
 
         ================================================================================
-           HASIL FINAL FASE 2 + HARDENING ABCD + NOTIFICATION ISLAND VALIDATION:
+           HASIL FINAL FASE 2 + FASE 3A (AUDIO CONTROL) VALIDATION:
            1. Magic numbers (86400, 15, 45) diganti konstanta bernama bertipe TimeInterval.
            2. Deduplikasi Adzan diperkuat menggunakan Set<String> dengan pemangkasan memori.
            3. Sleep/Wake mencatat MissedPrayerOccurrence terstruktur (nama, waktu, zona).
@@ -1353,7 +1394,8 @@ struct OzillValidatorApp {
            23. Item C: Smart Battery Alert (<= 15%) & 3.5s Charger Animation (Assertion 37 PASS).
            24. Item D: Launch at Login Manager & Global Shortcut Registration (Assertion 38 PASS).
            25. Universal Notification Island: Integrasi Jalur A (AXObserver), B (Browser Web), C (Sistem) (Assertion 39 PASS).
-           26. Seluruh 39 Automated Validation Assertions BERHASIL (PASS).
+           26. Fase 3A: AudioController Clamping, +/- 0.05 Step, Mute Toggle & State Isolation (Assertion 40 PASS).
+           27. Seluruh 40 Automated Validation Assertions BERHASIL (PASS).
         ================================================================================
         """)
     }

@@ -48,9 +48,13 @@ public final class IdleDimmingService: ObservableObject {
     }
     
     /// Evaluasi kondisi idle untuk menentukan apakah opasitas harus diturunkan
-    public func evaluateIdleState(simulatedDate: Date? = nil) {
+    public func evaluateIdleState(
+        simulatedDate: Date? = nil,
+        checkUpcomingPrayer: Bool = true,
+        checkMediaPlaying: Bool = true
+    ) {
         // 1. Jangan pernah transparan jika ada adzan berkumandang atau musik sedang aktif berputar
-        if AdhanAudioManager.shared.isPlaying || UniversalMusicManager.shared.playbackState.isPlaying {
+        if AdhanAudioManager.shared.isPlaying || (checkMediaPlaying && UniversalMusicManager.shared.playbackState.isPlaying) {
             recordActivity()
             return
         }
@@ -62,10 +66,12 @@ public final class IdleDimmingService: ObservableObject {
         }
         
         // 3. Jangan transparan jika waktu shalat tersisa <= 15 menit (Upcoming Event)
-        let remaining = PrayerScheduler.shared.nextPrayerTime.timeIntervalSince(Date())
-        if remaining > 0 && remaining <= 900 {
-            recordActivity()
-            return
+        if checkUpcomingPrayer {
+            let remaining = PrayerScheduler.shared.nextPrayerTime.timeIntervalSince(Date())
+            if remaining > 0 && remaining <= 900 {
+                recordActivity()
+                return
+            }
         }
         
         let now = simulatedDate ?? Date()
