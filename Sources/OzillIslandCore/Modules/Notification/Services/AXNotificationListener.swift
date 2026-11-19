@@ -2,7 +2,7 @@ import Foundation
 import AppKit
 import ApplicationServices
 
-/// Jalur A: Pemantau event banner notifikasi sistem macOS via Accessibility API & Window Inspection.
+/// Jalur A: Pemantau event banner notifikasi sistem macOS (termasuk WhatsApp, iPhone Mirroring, Telegram, Mail) via Accessibility API & Window Inspection.
 @MainActor
 public final class AXNotificationListener: ObservableObject {
     public static let shared = AXNotificationListener()
@@ -23,6 +23,10 @@ public final class AXNotificationListener: ObservableObject {
         
         if AXIsProcessTrusted() {
             attachObservers()
+        } else {
+            // Minta izin ke macOS agar aplikasi terdaftar di System Settings -> Privacy & Security -> Accessibility
+            let options: NSDictionary = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
+            _ = AXIsProcessTrustedWithOptions(options)
         }
         
         startPeriodicPolling()
@@ -41,11 +45,11 @@ public final class AXNotificationListener: ObservableObject {
     
     private func startPeriodicPolling() {
         pollTimer?.invalidate()
-        let t = Timer(timeInterval: 1.5, repeats: true) { [weak self] _ in
+        // Polling setiap 0.8 detik untuk responsivitas instan menangkap banner sistem
+        let t = Timer(timeInterval: 0.8, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
                 
-                // Perbarui status izin
                 let trusted = AXIsProcessTrusted()
                 if trusted != NotificationIslandService.shared.isAccessibilityGranted {
                     NotificationIslandService.shared.checkAccessibilityStatus()
@@ -64,8 +68,8 @@ public final class AXNotificationListener: ObservableObject {
     
     private func attachObservers() {
         let bundleIDs = [
-            "com.apple.UserNotificationCenter",
-            "com.apple.notificationcenterui"
+            "com.apple.notificationcenterui",
+            "com.apple.UserNotificationCenter"
         ]
         
         for bundleID in bundleIDs {
@@ -94,14 +98,14 @@ public final class AXNotificationListener: ObservableObject {
         }
     }
     
-    /// Polling berkala terhadap window banner aktif
-    private func pollActiveNotificationWindows() {
-        let cutoff = Date().addingTimeInterval(-15.0)
+    /// Polling berkala terhadap window banner aktif milik Notification Center
+    public func pollActiveNotificationWindows() {
+        let cutoff = Date().addingTimeInterval(-10.0)
         recentBannerHashes = recentBannerHashes.filter { $0.value > cutoff }
         
         let bundleIDs = [
-            "com.apple.UserNotificationCenter",
-            "com.apple.notificationcenterui"
+            "com.apple.notificationcenterui",
+            "com.apple.UserNotificationCenter"
         ]
         
         for bundleID in bundleIDs {
@@ -121,32 +125,89 @@ public final class AXNotificationListener: ObservableObject {
     
     private func handleAXEvent(element: AXUIElement) {
         var texts: [String] = []
-        extractTexts(from: element, depth: 0, maxDepth: 3, results: &texts)
+        extractTexts(from: element, depth: 0, maxDepth: 10, results: &texts)
+        
+        // Hapus teks bawaan sistem seperti "Notification Center"
+        texts.removeAll { $0.lowercased() == "notification center" || $0.isEmpty }
+        guard !texts.isEmpty else { return }
         
         let combined = texts.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !combined.isEmpty else { return }
+        guard combined.count >= 2 else { return }
         
-        let hash = combined
-        if let last = recentBannerHashes[hash], Date().timeIntervalSince(last) < 6.0 {
+        // Cek deduplikasi agar banner yang masih tampil tidak memicu posting berulang
+        if let last = recentBannerHashes[combined], Date().timeIntervalSince(last) < 7.0 {
             return
         }
-        recentBannerHashes[hash] = Date()
+        recentBannerHashes[combined] = Date()
         
-        let titleStr = texts.first ?? "Notifikasi"
-        let descStr = texts.count > 1 ? texts.dropFirst().joined(separator: " - ") : "Pesan masuk baru"
-        
-        let appName = detectAppName(from: titleStr, desc: descStr)
-        let (icon, hex) = styleForApp(appName)
+        // Ekstraksi terstruktur untuk notifikasi sistem & iPhone Mirroring:
+        // Pola umum: [AppName, Sender/Contact, Subtitle/Message, Body...]
+        let parsed = parseNotificationTexts(texts)
+        let (icon, hex) = styleForApp(parsed.appName)
         
         let notif = IslandNotification(
-            appName: appName,
-            title: titleStr,
-            message: descStr,
+            appName: parsed.appName,
+            title: parsed.title,
+            message: parsed.message,
             iconSymbol: icon,
             accentHex: hex,
             duration: 5.0
         )
         NotificationIslandService.shared.postNotification(notif)
+    }
+    
+    private func parseNotificationTexts(_ texts: [String]) -> (appName: String, title: String, message: String) {
+        // Daftar nama aplikasi umum
+        let knownApps = ["whatsapp", "instagram", "telegram", "slack", "mail", "discord", "messages", "pesan"]
+        
+        var foundAppIndex: Int? = nil
+        var detectedAppName = "Notifikasi Sistem"
+        
+        for (i, t) in texts.enumerated() {
+            let lower = t.lowercased()
+            for ka in knownApps {
+                if lower.contains(ka) {
+                    foundAppIndex = i
+                    detectedAppName = capitalizeAppName(ka)
+                    break
+                }
+            }
+            if foundAppIndex != nil { break }
+        }
+        
+        var remaining = texts
+        if let idx = foundAppIndex {
+            remaining.remove(at: idx)
+        }
+        
+        let title: String
+        let message: String
+        
+        if remaining.isEmpty {
+            title = detectedAppName
+            message = "Pesan baru masuk"
+        } else if remaining.count == 1 {
+            title = remaining[0]
+            message = "Pesan baru masuk"
+        } else {
+            title = remaining[0]
+            message = remaining.dropFirst().joined(separator: " • ")
+        }
+        
+        return (appName: detectedAppName, title: title, message: message)
+    }
+    
+    private func capitalizeAppName(_ raw: String) -> String {
+        switch raw.lowercased() {
+        case "whatsapp": return "WhatsApp"
+        case "instagram": return "Instagram"
+        case "telegram": return "Telegram"
+        case "slack": return "Slack"
+        case "mail": return "Mail"
+        case "discord": return "Discord"
+        case "messages", "pesan": return "Pesan"
+        default: return raw.capitalized
+        }
     }
     
     private func extractTexts(from element: AXUIElement, depth: Int, maxDepth: Int, results: inout [String]) {
@@ -166,28 +227,28 @@ public final class AXNotificationListener: ObservableObject {
         if let v = (valVal as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !v.isEmpty, !results.contains(v) {
             results.append(v)
         }
-        if let d = (descVal as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !d.isEmpty, !results.contains(d) {
-            results.append(d)
+        if let d = (descVal as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !d.isEmpty {
+            // Jika desc berupa daftar teks yang dipisahkan koma (khas AXGroup banner)
+            if d.contains(",") {
+                let parts = d.components(separatedBy: ", ")
+                for p in parts {
+                    let cleaned = p.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !cleaned.isEmpty && !results.contains(cleaned) {
+                        results.append(cleaned)
+                    }
+                }
+            } else if !results.contains(d) {
+                results.append(d)
+            }
         }
         
         var childrenVal: AnyObject?
         if AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &childrenVal) == .success,
            let children = childrenVal as? [AXUIElement] {
-            for child in children.prefix(8) {
+            for child in children.prefix(12) {
                 extractTexts(from: child, depth: depth + 1, maxDepth: maxDepth, results: &results)
             }
         }
-    }
-    
-    private func detectAppName(from title: String, desc: String) -> String {
-        let combined = "\(title) \(desc)".lowercased()
-        if combined.contains("whatsapp") { return "WhatsApp" }
-        if combined.contains("instagram") { return "Instagram" }
-        if combined.contains("telegram") { return "Telegram" }
-        if combined.contains("slack") { return "Slack" }
-        if combined.contains("mail") { return "Mail" }
-        if combined.contains("discord") { return "Discord" }
-        return "Notifikasi Sistem"
     }
     
     private func styleForApp(_ app: String) -> (String, String) {
@@ -198,6 +259,7 @@ public final class AXNotificationListener: ObservableObject {
         case "slack": return ("number", "#4A154B")
         case "mail": return ("envelope.fill", "#007AFF")
         case "discord": return ("bubble.left.and.bubble.right.fill", "#5865F2")
+        case "pesan", "messages": return ("bubble.left.fill", "#34C759")
         default: return ("bell.fill", "#00D2FF")
         }
     }
