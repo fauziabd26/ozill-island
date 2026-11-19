@@ -23,7 +23,7 @@ public final class PrayerIslandViewModel: ObservableObject {
     /// Transisi deterministik ke state expanded
     public func expand() {
         guard state != .expanded else { return }
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+        withAnimation(.spring(response: 0.40, dampingFraction: 0.80)) {
             state = .expanded
         }
     }
@@ -31,7 +31,7 @@ public final class PrayerIslandViewModel: ObservableObject {
     /// Transisi deterministik ke state collapsed
     public func collapse() {
         guard state != .collapsed else { return }
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+        withAnimation(.spring(response: 0.40, dampingFraction: 0.80)) {
             state = .collapsed
         }
     }
@@ -39,7 +39,7 @@ public final class PrayerIslandViewModel: ObservableObject {
     /// Buka halaman settings
     public func openSettings() {
         guard state != .settings else { return }
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+        withAnimation(.spring(response: 0.40, dampingFraction: 0.80)) {
             state = .settings
         }
     }
@@ -47,7 +47,7 @@ public final class PrayerIslandViewModel: ObservableObject {
     /// Tutup settings dan kembali ke expanded sheet
     public func closeToExpanded() {
         guard state != .expanded else { return }
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+        withAnimation(.spring(response: 0.40, dampingFraction: 0.80)) {
             state = .expanded
         }
     }

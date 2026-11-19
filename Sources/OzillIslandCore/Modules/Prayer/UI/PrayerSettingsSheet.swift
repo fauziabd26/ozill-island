@@ -19,7 +19,24 @@ public struct PrayerSettingsSheet: View {
         let palette = theme.palette
         let accent = theme.effectiveAccentColor
         
-        VStack(spacing: 12) {
+        VStack(spacing: 10) {
+            // Top Drag Handle (Bisa di-drag untuk menggeser Island ke mana saja)
+            Capsule(style: .continuous)
+                .fill(palette.secondaryText.opacity(0.35))
+                .frame(width: 38, height: 4.5)
+                .padding(.top, -6)
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 3, coordinateSpace: .global)
+                        .onChanged { value in
+                            IslandWindowController.shared.startDrag()
+                            IslandWindowController.shared.updateDrag(translation: value.translation)
+                        }
+                        .onEnded { value in
+                            IslandWindowController.shared.endDrag(translation: value.translation)
+                        }
+                )
+            
             // Header
             HStack {
                 Button(action: {
@@ -374,6 +391,34 @@ public struct PrayerSettingsSheet: View {
                 .foregroundColor(palette.secondaryText)
             
             VStack(spacing: 8) {
+                // Posisi Floating Island (Draggable)
+                HStack {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Posisi Floating Island (Bisa Digeser)")
+                            .font(.system(size: 11.5, weight: .semibold))
+                            .foregroundColor(palette.primaryText)
+                        Text(IslandWindowController.shared.customOffset == .zero ? "Posisi: Default Tengah Atas" : "Posisi: Dikustomisasi (Digeser)")
+                            .font(.system(size: 9.5))
+                            .foregroundColor(palette.secondaryText)
+                    }
+                    Spacer()
+                    Button("🎯 Reset ke Tengah") {
+                        IslandWindowController.shared.resetPositionToDefault()
+                    }
+                    .font(.system(size: 9.5, weight: .medium))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(palette.cardBackground)
+                    .foregroundColor(palette.primaryText)
+                    .cornerRadius(6)
+                    .buttonStyle(PlainButtonStyle())
+                }
+                .padding(8)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(palette.cardBackground)
+                )
+                
                 // Launch at Login Toggle
                 HStack {
                     VStack(alignment: .leading, spacing: 1) {

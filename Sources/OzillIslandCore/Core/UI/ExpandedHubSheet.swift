@@ -36,7 +36,24 @@ public struct ExpandedHubSheet: View {
         let palette = theme.palette
         let accent = theme.effectiveAccentColor
         
-        VStack(spacing: 12) {
+        VStack(spacing: 10) {
+            // Top Drag Handle (Bisa di-drag untuk menggeser Island ke mana saja)
+            Capsule(style: .continuous)
+                .fill(palette.secondaryText.opacity(0.35))
+                .frame(width: 38, height: 4.5)
+                .padding(.top, -6)
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 3, coordinateSpace: .global)
+                        .onChanged { value in
+                            IslandWindowController.shared.startDrag()
+                            IslandWindowController.shared.updateDrag(translation: value.translation)
+                        }
+                        .onEnded { value in
+                            IslandWindowController.shared.endDrag(translation: value.translation)
+                        }
+                )
+            
             // Header Bar
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -95,6 +112,20 @@ public struct ExpandedHubSheet: View {
                     }
                     .buttonStyle(PlainButtonStyle())
                     .help(musicManager.isPinnedToMusic ? "Lepas Pin Musik (Kembali ke Otomatis)" : "Pin Musik ke Island (Kunci agar tidak hilang)")
+                    
+                    if IslandWindowController.shared.customOffset != .zero {
+                        Button(action: {
+                            IslandWindowController.shared.resetPositionToDefault()
+                        }) {
+                            Image(systemName: "scope")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(palette.secondaryText)
+                                .frame(width: 30, height: 30)
+                                .background(Circle().fill(palette.cardBackground))
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        .help("Reset Posisi ke Tengah Atas")
+                    }
                     
                     Button(action: {
                         vm.openSettings()

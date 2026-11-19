@@ -10,8 +10,18 @@ public final class IslandWindowController: NSObject {
     private var globalClickMonitor: Any?
     private var localClickMonitor: Any?
     
+    // MARK: - Dragging & Custom Positioning
+    private let kUserOffsetXKey = "OzillIsland_UserOffsetX"
+    private let kUserOffsetYKey = "OzillIsland_UserOffsetY"
+    
+    public private(set) var customOffset: CGSize = .zero
+    private var dragStartOrigin: NSPoint?
+    
     public override init() {
         super.init()
+        let savedX = UserDefaults.standard.double(forKey: kUserOffsetXKey)
+        let savedY = UserDefaults.standard.double(forKey: kUserOffsetYKey)
+        self.customOffset = CGSize(width: savedX, height: savedY)
     }
     
     public func setupAndShow() {
@@ -28,6 +38,7 @@ public final class IslandWindowController: NSObject {
         let rootView = IslandPillView(vm: PrayerIslandViewModel.shared)
         let hosting = IslandHostingView(rootView: rootView)
         hosting.frame = NSRect(x: 0, y: 0, width: initialWidth, height: initialHeight)
+        hosting.autoresizingMask = [.width, .height]
         
         newPanel.contentView = hosting
         newPanel.setFrame(rect, display: true)
@@ -48,6 +59,61 @@ public final class IslandWindowController: NSObject {
         // Setup otomatis auto-collapse saat pengguna klik di luar island
         setupClickOutsideMonitoring()
     }
+    
+    // MARK: - Window Dragging Engine (Kiri, Kanan, Atas, Bawah)
+    
+    public func startDrag() {
+        guard let panel = panel else { return }
+        self.dragStartOrigin = panel.frame.origin
+    }
+    
+    public func updateDrag(translation: CGSize) {
+        guard let panel = panel, let start = dragStartOrigin else { return }
+        
+        // Di macOS AppKit: y positif adalah ke atas, sedangkan di SwiftUI translation.height positif adalah ke bawah
+        let newX = start.x + translation.width
+        let newY = start.y - translation.height
+        
+        panel.setFrameOrigin(NSPoint(x: newX, y: newY))
+    }
+    
+    public func endDrag(translation: CGSize) {
+        guard let panel = panel, let start = dragStartOrigin, let screen = NSScreen.main else {
+            self.dragStartOrigin = nil
+            return
+        }
+        
+        let finalX = start.x + translation.width
+        let finalY = start.y - translation.height
+        
+        let visibleFrame = screen.visibleFrame
+        let currentSize = panel.frame.size
+        let defaultX = visibleFrame.origin.x + (visibleFrame.width - currentSize.width) / 2
+        let defaultY = visibleFrame.origin.y + visibleFrame.height - currentSize.height - 4
+        
+        // Hitung offset relatif terhadap default notch
+        let newOffsetX = finalX - defaultX
+        let newOffsetY = finalY - defaultY
+        
+        self.customOffset = CGSize(width: newOffsetX, height: newOffsetY)
+        UserDefaults.standard.set(newOffsetX, forKey: kUserOffsetXKey)
+        UserDefaults.standard.set(newOffsetY, forKey: kUserOffsetYKey)
+        
+        self.dragStartOrigin = nil
+        
+        // Snap halus ke batas frame layar jika terlempar ke luar layar
+        updateFrame(for: PrayerIslandViewModel.shared.state, animated: true)
+    }
+    
+    /// Reset posisi Island kembali ke tengah atas default (bawah notch / menu bar)
+    public func resetPositionToDefault() {
+        self.customOffset = .zero
+        UserDefaults.standard.removeObject(forKey: kUserOffsetXKey)
+        UserDefaults.standard.removeObject(forKey: kUserOffsetYKey)
+        updateFrame(for: PrayerIslandViewModel.shared.state, animated: true)
+    }
+    
+    // MARK: - Click Outside Handling
     
     private func setupClickOutsideMonitoring() {
         if globalClickMonitor == nil {
@@ -70,7 +136,6 @@ public final class IslandWindowController: NSObject {
     private func handlePotentialClickOutside() {
         guard let panel = panel else { return }
         let currentState = PrayerIslandViewModel.shared.state
-        // Hanya auto-collapse jika sedang dalam state expanded atau settings
         guard currentState != .collapsed else { return }
         
         let mouseLocation = NSEvent.mouseLocation
@@ -79,7 +144,6 @@ public final class IslandWindowController: NSObject {
         }
     }
     
-    /// Membuka langsung halaman Settings di floating island
     public func openSettings() {
         setupAndShow()
         IdleDimmingService.shared.recordActivity()
@@ -87,49 +151,72 @@ public final class IslandWindowController: NSObject {
         PrayerIslandViewModel.shared.openSettings()
     }
     
-    /// Membuka ke tampilan expanded
     public func expand() {
         setupAndShow()
         IdleDimmingService.shared.recordActivity()
         PrayerIslandViewModel.shared.expand()
     }
     
-    /// Menutup panel kembali ke pill collapsed
     public func collapse() {
         IdleDimmingService.shared.recordActivity()
         PrayerIslandViewModel.shared.collapse()
     }
     
-    /// Toggle antara collapsed dan expanded
     public func toggleExpand() {
         setupAndShow()
         IdleDimmingService.shared.recordActivity()
         PrayerIslandViewModel.shared.toggle()
     }
     
+    // MARK: - Smooth Anchor-Aware Frame Update (Top-Center Pinned)
+    
     public func updateFrame(for state: IslandState, animated: Bool = true) {
-        guard let panel = panel else { return }
+        guard let panel = panel, let screen = NSScreen.main else { return }
         
-        let width: CGFloat
-        let height: CGFloat
+        let targetWidth: CGFloat
+        let targetHeight: CGFloat
         
         switch state {
         case .collapsed:
-            width = 360
-            height = 48
+            targetWidth = 360
+            targetHeight = 48
         case .expanded:
-            width = 390
-            height = 425
+            targetWidth = 390
+            targetHeight = 425
         case .settings:
-            width = 390
-            height = 425
+            targetWidth = 390
+            targetHeight = 425
         }
         
-        let targetFrame = calculateFrame(width: width, height: height)
+        let currentFrame = panel.frame
+        let visibleFrame = screen.visibleFrame
+        
+        // PENTING: Pertahankan titik jangkar top-center agar ekspansi dan kolaps
+        // mekar / menggulung secara mulus dari posisi atas Island saat ini
+        let currentTopCenter = CGPoint(
+            x: currentFrame.origin.x + currentFrame.width / 2,
+            y: currentFrame.origin.y + currentFrame.height
+        )
+        
+        var targetX = currentTopCenter.x - targetWidth / 2
+        var targetY = currentTopCenter.y - targetHeight
+        
+        // Jika belum ada posisi sebelumnya atau di luar batas, gunakan kalkulasi frame berbasis offset
+        if currentFrame.width < 10 || currentFrame.height < 10 {
+            let baseFrame = calculateFrame(width: targetWidth, height: targetHeight)
+            targetX = baseFrame.origin.x
+            targetY = baseFrame.origin.y
+        } else {
+            // Clamp agar tidak keluar dari visible frame layar
+            targetX = max(visibleFrame.origin.x + 8, min(visibleFrame.origin.x + visibleFrame.width - targetWidth - 8, targetX))
+            targetY = max(visibleFrame.origin.y + 8, min(visibleFrame.origin.y + visibleFrame.height - targetHeight - 2, targetY))
+        }
+        
+        let targetFrame = NSRect(x: targetX, y: targetY, width: targetWidth, height: targetHeight)
         
         if animated {
             NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.35
+                context.duration = 0.40
                 context.timingFunction = CAMediaTimingFunction(controlPoints: 0.16, 1.0, 0.3, 1.0)
                 context.allowsImplicitAnimation = true
                 panel.animator().setFrame(targetFrame, display: true)
@@ -146,12 +233,16 @@ public final class IslandWindowController: NSObject {
         
         let visibleFrame = screen.visibleFrame
         
-        // Posisi tepat di tengah horizontal
-        let x = visibleFrame.origin.x + (visibleFrame.width - width) / 2
+        // Posisi dasar: Tepat di tengah horizontal, tepat di bawah menu bar
+        let defaultX = visibleFrame.origin.x + (visibleFrame.width - width) / 2
+        let defaultY = visibleFrame.origin.y + visibleFrame.height - height - 4
         
-        // Posisi tepat di bawah menu bar (2-4 pt padding)
-        let menuBarBottom = visibleFrame.origin.y + visibleFrame.height
-        let y = menuBarBottom - height - 4
+        var x = defaultX + customOffset.width
+        var y = defaultY + customOffset.height
+        
+        // Clamp agar tidak keluar dari visible frame layar
+        x = max(visibleFrame.origin.x + 8, min(visibleFrame.origin.x + visibleFrame.width - width - 8, x))
+        y = max(visibleFrame.origin.y + 8, min(visibleFrame.origin.y + visibleFrame.height - height - 2, y))
         
         return NSRect(x: x, y: y, width: width, height: height)
     }
