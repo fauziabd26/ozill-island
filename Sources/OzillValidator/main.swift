@@ -1644,10 +1644,270 @@ struct OzillValidatorApp {
             }
         }
 
+        // MARK: - Assertion 43: Fase 3D - Safari Quick Action & Screenshot Utility
+        final class MockScreenshotHardwareBridge: ScreenshotHardwareBridging, @unchecked Sendable {
+            private let lock = NSLock()
+            var hasPermission: Bool = true
+            var shouldFailCapture: Bool = false
+            var captureableWindowsList: [CaptureableWindowInfo] = []
+            
+            var lastCapturedMode: String?
+            var lastDisplayId: CGDirectDisplayID?
+            var lastRect: CGRect?
+            var lastWindowId: CGWindowID?
+            
+            init(hasPermission: Bool = true, windows: [CaptureableWindowInfo] = []) {
+                self.hasPermission = hasPermission
+                self.captureableWindowsList = windows
+            }
+            
+            func checkPermission() -> Bool {
+                lock.withLock { hasPermission }
+            }
+            
+            private func createTestCGImage(width: Int = 200, height: Int = 150) -> CGImage {
+                let colorSpace = CGColorSpaceCreateDeviceRGB()
+                let bitmapInfo = CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue)
+                let context = CGContext(
+                    data: nil,
+                    width: width,
+                    height: height,
+                    bitsPerComponent: 8,
+                    bytesPerRow: width * 4,
+                    space: colorSpace,
+                    bitmapInfo: bitmapInfo.rawValue
+                )!
+                context.setFillColor(CGColor(red: 0.1, green: 0.5, blue: 0.8, alpha: 1.0))
+                context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+                return context.makeImage()!
+            }
+            
+            func captureFullScreen(displayId: CGDirectDisplayID) async -> Result<CGImage, Error> {
+                lock.withLock {
+                    guard hasPermission else { return .failure(ScreenshotError.permissionDenied) }
+                    if shouldFailCapture { return .failure(ScreenshotError.captureFailed("Simulated hardware error")) }
+                    lastCapturedMode = "fullScreen"
+                    lastDisplayId = displayId
+                    return .success(createTestCGImage(width: 800, height: 600))
+                }
+            }
+            
+            func captureArea(_ rect: CGRect, displayId: CGDirectDisplayID) async -> Result<CGImage, Error> {
+                lock.withLock {
+                    guard hasPermission else { return .failure(ScreenshotError.permissionDenied) }
+                    if shouldFailCapture { return .failure(ScreenshotError.captureFailed("Simulated area error")) }
+                    guard rect.width > 1 && rect.height > 1 else {
+                        return .failure(ScreenshotError.userCancelled)
+                    }
+                    lastCapturedMode = "selectedArea"
+                    lastDisplayId = displayId
+                    lastRect = rect
+                    return .success(createTestCGImage(width: Int(rect.width), height: Int(rect.height)))
+                }
+            }
+            
+            func captureWindow(windowId: CGWindowID) async -> Result<CGImage, Error> {
+                lock.withLock {
+                    guard hasPermission else { return .failure(ScreenshotError.permissionDenied) }
+                    if shouldFailCapture { return .failure(ScreenshotError.captureFailed("Simulated window error")) }
+                    guard captureableWindowsList.contains(where: { $0.id == windowId }) else {
+                        return .failure(ScreenshotError.windowNotFound)
+                    }
+                    lastCapturedMode = "window"
+                    lastWindowId = windowId
+                    return .success(createTestCGImage(width: 400, height: 300))
+                }
+            }
+            
+            func getCaptureableWindows() async -> [CaptureableWindowInfo] {
+                lock.withLock { captureableWindowsList }
+            }
+        }
+
+        await runAsyncTest("Fase 3D: Safari Quick Action, Screenshot Utility (Full/Area/Window), PNG & Clipboard") {
+            // --- BAGIAN A: Safari Quick Action ---
+            let launcher = ApplicationLauncher.shared
+            assert(ApplicationLauncher.safariBundleId == "com.apple.Safari", "Bundle ID Safari harus 'com.apple.Safari'")
+            
+            // 1. Uji deteksi status berjalan Safari
+            _ = launcher.isApplicationRunning(bundleIdentifier: ApplicationLauncher.safariBundleId)
+            
+            // 2. Error handling bundle identifier tidak valid
+            let invalidLaunchResult = await launcher.launchOrActivate(bundleIdentifier: "org.ozill.nonexistent.app12345")
+            switch invalidLaunchResult {
+            case .failure(let error):
+                if let appErr = error as? ApplicationLauncherError, case .applicationNotFound = appErr {
+                    // Sesuai ekspektasi
+                } else {
+                    assertionFailure("Error harus berjenis ApplicationLauncherError.applicationNotFound")
+                }
+            case .success:
+                assertionFailure("Aplikasi non-existent tidak boleh sukses dibuka")
+            }
+            
+            // --- BAGIAN B: Screenshot Utility ---
+            let testWindow = CaptureableWindowInfo(
+                id: 42,
+                title: "Safari - Welcome to Apple",
+                appName: "Safari",
+                appBundleId: "com.apple.Safari",
+                frame: CGRect(x: 100, y: 100, width: 900, height: 600)
+            )
+            
+            let mockBridge = MockScreenshotHardwareBridge(hasPermission: true, windows: [testWindow])
+            let controller = ScreenshotController(hardwareBridge: mockBridge)
+            
+            // 3. Verifikasi Mode Screenshot Enum
+            assert(ScreenshotMode.allCases.count == 3)
+            assert(ScreenshotMode.fullScreen.systemImage == "display")
+            assert(ScreenshotMode.selectedArea.systemImage == "viewfinder")
+            assert(ScreenshotMode.window.systemImage == "macwindow")
+            
+            // 4. Pengujian Full Screen Capture
+            let fullResult = await controller.executeCapture(mode: .fullScreen, displayId: 1)
+            switch fullResult {
+            case .success(let res):
+                assert(res.mode == .fullScreen)
+                assert(res.pixelWidth == 800 && res.pixelHeight == 600)
+                // Verifikasi Magic Bytes Header PNG (0x89, 0x50, 0x4E, 0x47)
+                let header = [UInt8](res.pngData.prefix(4))
+                assert(header == [0x89, 0x50, 0x4E, 0x47], "Berkas hasil harus memiliki magic bytes format PNG yang sah")
+                assert(mockBridge.lastCapturedMode == "fullScreen")
+                assert(mockBridge.lastDisplayId == 1)
+            case .failure(let err):
+                assertionFailure("Full screen capture harus berhasil pada mock: \(err)")
+            }
+            
+            // 5. Pengujian Selected Area Capture & Koordinat Fisik Retina Scaling
+            let pointsRect = CGRect(x: 50, y: 50, width: 250, height: 180)
+            let retinaScale: CGFloat = 2.0
+            let physicalRetinaRect = CGRect(
+                x: pointsRect.origin.x * retinaScale,
+                y: pointsRect.origin.y * retinaScale,
+                width: pointsRect.size.width * retinaScale,
+                height: pointsRect.size.height * retinaScale
+            )
+            
+            let areaResult = await controller.executeCapture(mode: .selectedArea, displayId: 1, rect: physicalRetinaRect)
+            switch areaResult {
+            case .success(let res):
+                assert(res.mode == .selectedArea)
+                assert(res.pixelWidth == 500 && res.pixelHeight == 360, "Dimensi piksel harus sesuai konversi skala fisik Retina 2x")
+                assert(mockBridge.lastCapturedMode == "selectedArea")
+                assert(mockBridge.lastRect == physicalRetinaRect)
+            case .failure(let err):
+                assertionFailure("Area capture harus berhasil: \(err)")
+            }
+            
+            // 6. Pengujian Pembatalan Pengguna (User Cancellation) pada Area Capture
+            let cancelledResult = await controller.executeCapture(mode: .selectedArea, displayId: 1, rect: nil)
+            switch cancelledResult {
+            case .failure(let err):
+                if let scrErr = err as? ScreenshotError, scrErr == .userCancelled {
+                    // Sesuai ekspektasi
+                } else {
+                    assertionFailure("Rect kosong harus menghasilkan ScreenshotError.userCancelled")
+                }
+            case .success:
+                assertionFailure("Capture dengan rect kosong tidak boleh berhasil")
+            }
+            
+            // 7. Pengujian Window Selection Capture
+            await controller.refreshCaptureableWindows()
+            assert(controller.availableWindows.count == 1)
+            assert(controller.availableWindows.first?.id == 42)
+            
+            let windowSuccessResult = await controller.executeCapture(mode: .window, windowId: 42)
+            switch windowSuccessResult {
+            case .success(let res):
+                assert(res.mode == .window)
+                assert(res.pixelWidth == 400 && res.pixelHeight == 300)
+                assert(mockBridge.lastCapturedMode == "window")
+                assert(mockBridge.lastWindowId == 42)
+            case .failure(let err):
+                assertionFailure("Window capture valid harus berhasil: \(err)")
+            }
+            
+            // 8. Pengujian Jendela Tidak Valid
+            let invalidWindowResult = await controller.executeCapture(mode: .window, windowId: 9999)
+            switch invalidWindowResult {
+            case .failure(let err):
+                if let scrErr = err as? ScreenshotError, scrErr == .windowNotFound {
+                    // Sesuai ekspektasi
+                } else {
+                    assertionFailure("Jendela tidak ditemukan harus menghasilkan ScreenshotError.windowNotFound")
+                }
+            case .success:
+                assertionFailure("Jendela tidak valid tidak boleh berhasil di-capture")
+            }
+            
+            // 9. Pengujian Izin Screen Recording Ditolak (Permission Unavailable)
+            mockBridge.hasPermission = false
+            let deniedResult = await controller.executeCapture(mode: .fullScreen)
+            switch deniedResult {
+            case .failure(let err):
+                if let scrErr = err as? ScreenshotError, scrErr == .permissionDenied {
+                    // Sesuai ekspektasi
+                } else {
+                    assertionFailure("Harus menghasilkan ScreenshotError.permissionDenied saat izin tidak ada")
+                }
+            case .success:
+                assertionFailure("Tidak boleh mengambil screenshot saat izin ditolak")
+            }
+            mockBridge.hasPermission = true
+            
+            // 10. Pengujian Output Clipboard & Destinasi File
+            let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("OzillScreenshotTests_\(UUID().uuidString)")
+            try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: tempDir) }
+            
+            controller.settings = ScreenshotSettings(
+                destination: .customFolder,
+                customFolderPath: tempDir.path,
+                copyToClipboard: true,
+                showNotification: false
+            )
+            
+            let fileDestResult = await controller.executeCapture(mode: .fullScreen)
+            switch fileDestResult {
+            case .success(let res):
+                assert(res.copiedToClipboard == true, "Clipboard output harus aktif sesuai konfigurasi")
+                assert(res.savedURL != nil, "savedURL harus terisi")
+                if let fileUrl = res.savedURL {
+                    assert(FileManager.default.fileExists(atPath: fileUrl.path), "Berkas PNG harus tersimpan di direktori tujuan")
+                }
+            case .failure(let err):
+                assertionFailure("File write capture gagal: \(err)")
+            }
+            
+            // 11. Pengujian File Write Error Handling
+            controller.settings = ScreenshotSettings(
+                destination: .customFolder,
+                customFolderPath: "/nonexistent/invalid/directory/path/that/cannot/be/written",
+                copyToClipboard: false,
+                showNotification: false
+            )
+            let writeFailResult = await controller.executeCapture(mode: .fullScreen)
+            switch writeFailResult {
+            case .failure(let err):
+                if let scrErr = err as? ScreenshotError, case .fileWriteFailed = scrErr {
+                    // Sesuai ekspektasi
+                } else {
+                    assertionFailure("Menulis ke path invalid harus menghasilkan ScreenshotError.fileWriteFailed")
+                }
+            case .success:
+                assertionFailure("Menulis ke folder invalid tidak boleh berhasil")
+            }
+            
+            // 12. Native Hardware Bridge Safe Check
+            let nativeBridge = NativeScreenshotHardwareBridge()
+            _ = nativeBridge.checkPermission()
+        }
+
         print("""
 
         ================================================================================
-           HASIL FINAL FASE 2 + FASE 3A, 3B, & 3C (AUDIO, MEDIA, BRIGHTNESS) VALIDATION:
+           HASIL FINAL FASE 2 + FASE 3A, 3B, 3C & 3D (COMPLETE CONTROLS) VALIDATION:
            1. Magic numbers (86400, 15, 45) diganti konstanta bernama bertipe TimeInterval.
            2. Deduplikasi Adzan diperkuat menggunakan Set<String> dengan pemangkasan memori.
            3. Sleep/Wake mencatat MissedPrayerOccurrence terstruktur (nama, waktu, zona).
@@ -1676,7 +1936,8 @@ struct OzillValidatorApp {
            26. Fase 3A: AudioController Clamping, +/- 0.05 Step, Mute Toggle & State Isolation (Assertion 40 PASS).
            27. Fase 3B: MediaControl Previous/Next/PlayPause, Capabilities, Chrome Multi-Tab Manual Routing (Assertion 41 PASS).
            28. Fase 3C: Display Brightness Control, Clamping, Multi-Display Selection & External Fallback (Assertion 42 PASS).
-           29. Seluruh 42 Automated Validation Assertions BERHASIL (PASS).
+           29. Fase 3D: Safari Quick Action, Screenshot Utility (Full/Area/Window), PNG & Clipboard (Assertion 43 PASS).
+           30. Seluruh 43 Automated Validation Assertions BERHASIL (PASS).
         ================================================================================
         """)
     }
