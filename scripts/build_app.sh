@@ -34,8 +34,8 @@ fi
 # Salin audio fallback langsung ke Resources bundle utama juga
 cp Sources/OzillIslandCore/Resources/AdhanSample.wav "${RESOURCES_DIR}/"
 
-echo "🔏 [5/5] Melakukan ad-hoc Code Signing lokal..."
-codesign --force --deep --sign - "${APP_BUNDLE}"
+echo "🔏 [5/5] Melakukan Code Signing lokal dengan designated identifier..."
+codesign --force --deep --sign - --identifier "com.fauzi.ozillisland" --requirement '=designated => identifier "com.fauzi.ozillisland"' "${APP_BUNDLE}"
 
 echo ""
 echo "🎉 Build dan packaging berhasil!"

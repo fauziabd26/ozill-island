@@ -86,6 +86,7 @@ public struct PrayerSettingsSheet: View {
         .shadow(color: palette.shadowColor, radius: 20, x: 0, y: 10)
         .onAppear {
             customHexInput = theme.customHex
+            notifService.checkAccessibilityStatus()
         }
     }
     
@@ -483,13 +484,30 @@ public struct PrayerSettingsSheet: View {
                             Text("Notifikasi Aplikasi (WA, IG, dsb)")
                                 .font(.system(size: 11.5, weight: .semibold))
                                 .foregroundColor(palette.primaryText)
-                            Text(notifService.isAccessibilityAuthorized ? "Izin Aksesibilitas: Aktif ✅" : "Izin Aksesibilitas: Belum Aktif ⚠️")
+                            Text(notifService.isAccessibilityAuthorized ? "Izin Aksesibilitas: Aktif ✅" : "Izin Aksesibilitas: Belum Terdeteksi ⚠️")
                                 .font(.system(size: 9.5))
                                 .foregroundColor(notifService.isAccessibilityAuthorized ? .green : .orange)
                         }
                         Spacer()
+                        
+                        Button(action: {
+                            notifService.checkAccessibilityStatus()
+                        }) {
+                            HStack(spacing: 3) {
+                                Image(systemName: "arrow.clockwise")
+                                Text("Cek Status")
+                            }
+                            .font(.system(size: 9.5, weight: .medium))
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3.5)
+                            .background(palette.cardBackground)
+                            .foregroundColor(palette.primaryText)
+                            .cornerRadius(6)
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        
                         if !notifService.isAccessibilityAuthorized {
-                            Button("Beri Izin") {
+                            Button("Buka Pengaturan") {
                                 notifService.requestAccessibilityPermission()
                             }
                             .font(.system(size: 9.5, weight: .bold))
@@ -498,7 +516,14 @@ public struct PrayerSettingsSheet: View {
                             .background(accent.opacity(0.18))
                             .foregroundColor(accent)
                             .cornerRadius(6)
+                            .buttonStyle(PlainButtonStyle())
                         }
+                    }
+                    
+                    if !notifService.isAccessibilityAuthorized {
+                        Text("💡 Jika toggle di System Settings sudah ON, klik tombol 'Cek Status' di atas atau restart aplikasi.")
+                            .font(.system(size: 8.5))
+                            .foregroundColor(palette.secondaryText.opacity(0.8))
                     }
                     
                     // Tombol Uji Notifikasi
