@@ -35,22 +35,32 @@ public struct ExpandedHubSheet: View {
         let accent = theme.effectiveAccentColor
 
         VStack(spacing: 10) {
-            // Top Drag Handle (Bisa di-drag untuk menggeser Island ke mana saja)
-            Capsule(style: .continuous)
-                .fill(palette.secondaryText.opacity(0.35))
-                .frame(width: 38, height: 4.5)
-                .padding(.top, -6)
-                .contentShape(Rectangle())
-                .gesture(
-                    DragGesture(minimumDistance: 3, coordinateSpace: .global)
-                        .onChanged { value in
-                            IslandWindowController.shared.startDrag()
-                            IslandWindowController.shared.updateDrag(translation: value.translation)
-                        }
-                        .onEnded { value in
-                            IslandWindowController.shared.endDrag(translation: value.translation)
-                        }
-                )
+            // Top Drag Handle & Window Mover Bar
+            HStack(spacing: 8) {
+                Image(systemName: "line.3.horizontal")
+                    .font(.system(size: 8.5, weight: .bold))
+                    .foregroundColor(palette.secondaryText.opacity(0.4))
+                Capsule(style: .continuous)
+                    .fill(palette.secondaryText.opacity(0.35))
+                    .frame(width: 48, height: 4.5)
+                Image(systemName: "line.3.horizontal")
+                    .font(.system(size: 8.5, weight: .bold))
+                    .foregroundColor(palette.secondaryText.opacity(0.4))
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 20)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 2, coordinateSpace: .global)
+                    .onChanged { value in
+                        IslandWindowController.shared.startDrag()
+                        IslandWindowController.shared.updateDrag(translation: value.translation)
+                    }
+                    .onEnded { value in
+                        IslandWindowController.shared.endDrag(translation: value.translation)
+                    }
+            )
+            .help("Klik & tahan untuk memindahkan posisi Ozill Island di layar")
 
             // Header Bar
             HStack(alignment: .center) {
@@ -81,8 +91,30 @@ public struct ExpandedHubSheet: View {
                         .help("Refresh Lokasi GPS")
                     }
                 }
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 3, coordinateSpace: .global)
+                        .onChanged { value in
+                            IslandWindowController.shared.startDrag()
+                            IslandWindowController.shared.updateDrag(translation: value.translation)
+                        }
+                        .onEnded { value in
+                            IslandWindowController.shared.endDrag(translation: value.translation)
+                        }
+                )
 
-                Spacer()
+                Spacer(minLength: 12)
+                    .contentShape(Rectangle())
+                    .gesture(
+                        DragGesture(minimumDistance: 2, coordinateSpace: .global)
+                            .onChanged { value in
+                                IslandWindowController.shared.startDrag()
+                                IslandWindowController.shared.updateDrag(translation: value.translation)
+                            }
+                            .onEnded { value in
+                                IslandWindowController.shared.endDrag(translation: value.translation)
+                            }
+                    )
 
                 HStack(spacing: 8) {
                     // Pin Music Button
@@ -205,8 +237,15 @@ public struct ExpandedHubSheet: View {
                 .fill(palette.background)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(palette.border, lineWidth: 1.0)
+            ZStack {
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .stroke(palette.border, lineWidth: 1.0)
+                IslandLightningBorder(
+                    shapeType: .roundedRectangle(cornerRadius: 24),
+                    accentColor: accent,
+                    isHovered: false
+                )
+            }
         )
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         .shadow(color: palette.shadowColor, radius: 20, x: 0, y: 10)

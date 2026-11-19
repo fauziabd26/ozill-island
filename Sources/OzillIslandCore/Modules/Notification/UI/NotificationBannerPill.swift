@@ -116,11 +116,18 @@ public struct NotificationBannerPill: View {
                 .fill(palette.background)
         )
         .overlay(
-            Capsule(style: .continuous)
-                .stroke(
-                    accent.opacity(isHovered ? 0.95 : 0.75),
-                    lineWidth: isHovered ? 1.4 : 1.1
+            ZStack {
+                Capsule(style: .continuous)
+                    .stroke(
+                        accent.opacity(isHovered ? 0.95 : 0.75),
+                        lineWidth: isHovered ? 1.4 : 1.1
+                    )
+                IslandLightningBorder(
+                    shapeType: .capsule,
+                    accentColor: accent,
+                    isHovered: isHovered
                 )
+            }
         )
         .clipShape(Capsule(style: .continuous))
         .contentShape(Capsule(style: .continuous))

@@ -191,11 +191,18 @@ public struct CollapsedPrayerPill: View {
                 .fill(palette.background)
         )
         .overlay(
-            Capsule(style: .continuous)
-                .stroke(
-                    isHovered ? accent.opacity(0.85) : palette.border,
-                    lineWidth: isHovered ? 1.4 : 1.0
+            ZStack {
+                Capsule(style: .continuous)
+                    .stroke(
+                        isHovered ? accent.opacity(0.85) : palette.border,
+                        lineWidth: isHovered ? 1.4 : 1.0
+                    )
+                IslandLightningBorder(
+                    shapeType: .capsule,
+                    accentColor: accent,
+                    isHovered: isHovered
                 )
+            }
         )
         .clipShape(Capsule(style: .continuous))
         .contentShape(Capsule(style: .continuous))

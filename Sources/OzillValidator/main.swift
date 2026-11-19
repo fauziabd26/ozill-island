@@ -869,6 +869,13 @@ struct OzillValidatorApp {
             // 3. Kembalikan ke .smart
             settings.resetToDefaults()
             assert(settings.standbyMode == .smart)
+
+            // 4. Verifikasi Lightning Border setting & persistence
+            assert(settings.isLightningEnabled == true, "Default isLightningEnabled harus true")
+            settings.isLightningEnabled = false
+            assert(UserDefaults.standard.bool(forKey: GeneralSettings.isLightningEnabledKey) == false)
+            settings.resetToDefaults()
+            assert(settings.isLightningEnabled == true)
         }
 
         // Assertion 27: IslandModeRouter Priority Resolution & Anti-Flapping

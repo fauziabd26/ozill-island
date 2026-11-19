@@ -8,6 +8,7 @@ public struct PrayerSettingsSheet: View {
     @ObservedObject private var sys = SystemInfoService.shared
     @ObservedObject private var musicManager = UniversalMusicManager.shared
     @ObservedObject private var notifService = NotificationIslandService.shared
+    @ObservedObject private var generalSettings = GeneralSettings.shared
     @State private var selectedTab: Int = 0
     @State private var customHexInput: String = ""
 
@@ -20,22 +21,32 @@ public struct PrayerSettingsSheet: View {
         let accent = theme.effectiveAccentColor
 
         VStack(spacing: 10) {
-            // Top Drag Handle (Bisa di-drag untuk menggeser Island ke mana saja)
-            Capsule(style: .continuous)
-                .fill(palette.secondaryText.opacity(0.35))
-                .frame(width: 38, height: 4.5)
-                .padding(.top, -6)
-                .contentShape(Rectangle())
-                .gesture(
-                    DragGesture(minimumDistance: 3, coordinateSpace: .global)
-                        .onChanged { value in
-                            IslandWindowController.shared.startDrag()
-                            IslandWindowController.shared.updateDrag(translation: value.translation)
-                        }
-                        .onEnded { value in
-                            IslandWindowController.shared.endDrag(translation: value.translation)
-                        }
-                )
+            // Top Drag Handle & Window Mover Bar
+            HStack(spacing: 8) {
+                Image(systemName: "line.3.horizontal")
+                    .font(.system(size: 8.5, weight: .bold))
+                    .foregroundColor(palette.secondaryText.opacity(0.4))
+                Capsule(style: .continuous)
+                    .fill(palette.secondaryText.opacity(0.35))
+                    .frame(width: 48, height: 4.5)
+                Image(systemName: "line.3.horizontal")
+                    .font(.system(size: 8.5, weight: .bold))
+                    .foregroundColor(palette.secondaryText.opacity(0.4))
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 20)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 2, coordinateSpace: .global)
+                    .onChanged { value in
+                        IslandWindowController.shared.startDrag()
+                        IslandWindowController.shared.updateDrag(translation: value.translation)
+                    }
+                    .onEnded { value in
+                        IslandWindowController.shared.endDrag(translation: value.translation)
+                    }
+            )
+            .help("Klik & tahan untuk memindahkan posisi Ozill Island di layar")
 
             // Header
             HStack {
@@ -57,13 +68,46 @@ public struct PrayerSettingsSheet: View {
                 }
                 .buttonStyle(PlainButtonStyle())
 
-                Spacer()
+                Spacer(minLength: 8)
+                    .contentShape(Rectangle())
+                    .gesture(
+                        DragGesture(minimumDistance: 2, coordinateSpace: .global)
+                            .onChanged { value in
+                                IslandWindowController.shared.startDrag()
+                                IslandWindowController.shared.updateDrag(translation: value.translation)
+                            }
+                            .onEnded { value in
+                                IslandWindowController.shared.endDrag(translation: value.translation)
+                            }
+                    )
 
                 Text("Pengaturan Ozill Island")
                     .font(.system(size: 13, weight: .bold))
                     .foregroundColor(palette.primaryText)
+                    .contentShape(Rectangle())
+                    .gesture(
+                        DragGesture(minimumDistance: 2, coordinateSpace: .global)
+                            .onChanged { value in
+                                IslandWindowController.shared.startDrag()
+                                IslandWindowController.shared.updateDrag(translation: value.translation)
+                            }
+                            .onEnded { value in
+                                IslandWindowController.shared.endDrag(translation: value.translation)
+                            }
+                    )
 
-                Spacer()
+                Spacer(minLength: 8)
+                    .contentShape(Rectangle())
+                    .gesture(
+                        DragGesture(minimumDistance: 2, coordinateSpace: .global)
+                            .onChanged { value in
+                                IslandWindowController.shared.startDrag()
+                                IslandWindowController.shared.updateDrag(translation: value.translation)
+                            }
+                            .onEnded { value in
+                                IslandWindowController.shared.endDrag(translation: value.translation)
+                            }
+                    )
 
                 Text("       ")
                     .font(.system(size: 12))
@@ -113,8 +157,15 @@ public struct PrayerSettingsSheet: View {
                 .fill(palette.background)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(palette.border, lineWidth: 1.0)
+            ZStack {
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .stroke(palette.border, lineWidth: 1.0)
+                IslandLightningBorder(
+                    shapeType: .roundedRectangle(cornerRadius: 24),
+                    accentColor: accent,
+                    isHovered: false
+                )
+            }
         )
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         .shadow(color: palette.shadowColor, radius: 20, x: 0, y: 10)
@@ -471,6 +522,29 @@ public struct PrayerSettingsSheet: View {
                     .foregroundColor(palette.primaryText)
                     .cornerRadius(6)
                     .buttonStyle(PlainButtonStyle())
+                }
+                .padding(8)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(palette.cardBackground)
+                )
+
+                // Efek Lightning Border Toggle
+                HStack {
+                    VStack(alignment: .leading, spacing: 1) {
+                        HStack(spacing: 4) {
+                            Text("⚡ Efek Lightning Border")
+                                .font(.system(size: 11.5, weight: .semibold))
+                                .foregroundColor(palette.primaryText)
+                        }
+                        Text("Kilatan listrik neon di sekeliling pinggiran round Island")
+                            .font(.system(size: 9.5))
+                            .foregroundColor(palette.secondaryText)
+                    }
+                    Spacer()
+                    Toggle("", isOn: $generalSettings.isLightningEnabled)
+                        .toggleStyle(SwitchToggleStyle(tint: accent))
+                        .labelsHidden()
                 }
                 .padding(8)
                 .background(
