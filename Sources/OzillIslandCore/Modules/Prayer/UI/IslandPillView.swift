@@ -6,17 +6,18 @@ public struct IslandPillView: View {
     @ObservedObject private var router = IslandModeRouter.shared
     @ObservedObject private var dimmer = IdleDimmingService.shared
     @ObservedObject private var notifService = NotificationIslandService.shared
-    
+    @ObservedObject private var theme = IslandThemeManager.shared
+
     @State private var isDragging: Bool = false
-    
+
     public init(vm: PrayerIslandViewModel) {
         self.vm = vm
     }
-    
+
     public init() {
         self.vm = PrayerIslandViewModel.shared
     }
-    
+
     public var body: some View {
         Group {
             switch vm.state {
@@ -86,13 +87,14 @@ public struct IslandPillView: View {
         .animation(.spring(response: 0.40, dampingFraction: 0.80), value: vm.state)
         .animation(.spring(response: 0.40, dampingFraction: 0.80), value: router.currentMode)
         .animation(.spring(response: 0.40, dampingFraction: 0.80), value: notifService.activeNotification)
+        .preferredColorScheme(theme.palette.isDark ? .dark : .light)
         .onHover { hovering in
             if hovering {
                 dimmer.recordActivity()
             }
         }
     }
-    
+
     private func handlePillTap() {
         dimmer.recordActivity()
         vm.expand()

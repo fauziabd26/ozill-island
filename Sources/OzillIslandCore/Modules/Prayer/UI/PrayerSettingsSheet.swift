@@ -10,15 +10,15 @@ public struct PrayerSettingsSheet: View {
     @ObservedObject private var notifService = NotificationIslandService.shared
     @State private var selectedTab: Int = 0
     @State private var customHexInput: String = ""
-    
+
     public init(vm: PrayerIslandViewModel) {
         self.vm = vm
     }
-    
+
     public var body: some View {
         let palette = theme.palette
         let accent = theme.effectiveAccentColor
-        
+
         VStack(spacing: 10) {
             // Top Drag Handle (Bisa di-drag untuk menggeser Island ke mana saja)
             Capsule(style: .continuous)
@@ -36,7 +36,7 @@ public struct PrayerSettingsSheet: View {
                             IslandWindowController.shared.endDrag(translation: value.translation)
                         }
                 )
-            
+
             // Header
             HStack {
                 Button(action: {
@@ -56,28 +56,45 @@ public struct PrayerSettingsSheet: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(PlainButtonStyle())
-                
+
                 Spacer()
-                
+
                 Text("Pengaturan Ozill Island")
                     .font(.system(size: 13, weight: .bold))
                     .foregroundColor(palette.primaryText)
-                
+
                 Spacer()
-                
+
                 Text("       ")
                     .font(.system(size: 12))
             }
             .padding(.bottom, 2)
-            
-            // Picker Mode: 3 Tabs
-            Picker("", selection: $selectedTab) {
-                Text("Jadwal").tag(0)
-                Text("Lokasi").tag(1)
-                Text("Tampilan").tag(2)
+
+            // Segmented Tabs: 3 Tabs (Jadwal, Lokasi, Tampilan)
+            HStack(spacing: 6) {
+                ForEach(0..<3) { tabIndex in
+                    let title = tabIndex == 0 ? "Jadwal" : (tabIndex == 1 ? "Lokasi" : "Tampilan")
+                    let isSelected = selectedTab == tabIndex
+                    Button(action: {
+                        withAnimation(.spring(response: 0.28, dampingFraction: 0.78)) {
+                            selectedTab = tabIndex
+                        }
+                    }) {
+                        Text(title)
+                            .font(.system(size: 11, weight: isSelected ? .bold : .medium))
+                            .foregroundColor(isSelected ? .white : palette.primaryText)
+                            .padding(.vertical, 5)
+                            .frame(maxWidth: .infinity)
+                            .background(
+                                isSelected ?
+                                AnyView(Capsule(style: .continuous).fill(accent)) :
+                                AnyView(Capsule(style: .continuous).fill(palette.cardBackground))
+                            )
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
             }
-            .pickerStyle(SegmentedPickerStyle())
-            
+
             if selectedTab == 0 {
                 // Tab 0: Jadwal & Ihtiyati
                 jadwalTab(palette: palette, accent: accent)
@@ -105,8 +122,9 @@ public struct PrayerSettingsSheet: View {
             customHexInput = theme.customHex
             notifService.checkAccessibilityStatus()
         }
+        .preferredColorScheme(palette.isDark ? .dark : .light)
     }
-    
+
     // MARK: - Tab 0: Jadwal & Ihtiyati
     @ViewBuilder
     private func jadwalTab(palette: IslandColorPalette, accent: Color) -> some View {
@@ -117,24 +135,24 @@ public struct PrayerSettingsSheet: View {
                     Text("Kebijakan Ihtiyati (Buffer Waktu):")
                         .font(.system(size: 11, weight: .bold))
                         .foregroundColor(palette.secondaryText)
-                    
+
                     Picker("", selection: $settings.ihtiyatiPolicy) {
                         ForEach(IhtiyatiPolicy.allCases) { policy in
                             Text(policy.rawValue).tag(policy)
                         }
                     }
                     .pickerStyle(MenuPickerStyle())
-                    
+
                     Group {
                         switch settings.ihtiyatiPolicy {
                         case .pureAstronomical:
                             Text("Hisab astronomis murni tanpa ihtiyati (Offset 0 menit). Koreksi manual dinonaktifkan.")
-                                .foregroundColor(.cyan)
-                                
+                                .foregroundColor(palette.isDark ? .cyan : Color(red: 0.0, green: 0.45, blue: 0.7))
+
                         case .custom:
                             Text("Menggunakan koreksi manual pengguna (-5 s/d +5 menit) dari hasil hisab mentah.")
                                 .foregroundColor(accent)
-                                
+
                         case .experimentalSihatSnapshot:
                             let (_, isCalibrated, desc) = settings.effectiveAdjustment(
                                 for: .fajr,
@@ -156,7 +174,7 @@ public struct PrayerSettingsSheet: View {
                 .padding(10)
                 .background(palette.cardBackground)
                 .cornerRadius(8)
-                
+
                 // Per-Prayer Config
                 ForEach(PrayerName.fardhuPrayers) { prayer in
                     let pref = settings.preferences[prayer] ?? PrayerPreference()
@@ -168,7 +186,7 @@ public struct PrayerSettingsSheet: View {
                     )
                     let totalAdjSign = totalAdj > 0 ? "+\(totalAdj)" : "\(totalAdj)"
                     let isPure = settings.ihtiyatiPolicy == .pureAstronomical
-                    
+
                     VStack(spacing: 6) {
                         HStack {
                             Image(systemName: prayer.sfSymbol)
@@ -176,13 +194,13 @@ public struct PrayerSettingsSheet: View {
                             Text(prayer.rawValue)
                                 .font(.system(size: 13, weight: .bold))
                                 .foregroundColor(palette.primaryText)
-                            
+
                             Spacer()
-                            
+
                             Text("Total koreksi: \(totalAdjSign)m")
                                 .font(.system(size: 10, weight: .medium, design: .monospaced))
-                                .foregroundColor(isPure ? palette.secondaryText : .cyan)
-                            
+                                .foregroundColor(isPure ? palette.secondaryText : (palette.isDark ? .cyan : Color(red: 0.0, green: 0.45, blue: 0.7)))
+
                             Toggle("", isOn: Binding(
                                 get: { pref.enabled },
                                 set: { settings.update(prayer, enabled: $0) }
@@ -190,24 +208,26 @@ public struct PrayerSettingsSheet: View {
                             .toggleStyle(SwitchToggleStyle(tint: accent))
                             .labelsHidden()
                         }
-                        
+
                         if pref.enabled {
                             Divider().background(palette.border)
-                            
+
                             // Reminder row
                             HStack {
                                 Text("Pengingat:")
                                     .font(.system(size: 11))
                                     .foregroundColor(palette.secondaryText)
                                 Spacer()
-                                Stepper("\(pref.reminderMinutes) menit sblm", value: Binding(
+                                Text("\(pref.reminderMinutes) menit sblm")
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundColor(palette.primaryText)
+                                Stepper("", value: Binding(
                                     get: { pref.reminderMinutes },
                                     set: { settings.update(prayer, reminderMinutes: $0) }
                                 ), in: 0...60, step: 5)
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundColor(palette.primaryText)
+                                .labelsHidden()
                             }
-                            
+
                             // Adzan sound toggle row
                             HStack {
                                 Text("Putar Adzan:")
@@ -221,7 +241,7 @@ public struct PrayerSettingsSheet: View {
                                 .toggleStyle(SwitchToggleStyle(tint: .green))
                                 .labelsHidden()
                             }
-                            
+
                             // Manual Adjustment row (-5 to +5)
                             HStack {
                                 Text(isPure ? "Koreksi Manual (Terkunci):" : "Koreksi Manual Pengguna:")
@@ -230,18 +250,20 @@ public struct PrayerSettingsSheet: View {
                                 Spacer()
                                 let manual = pref.manualAdjustmentMinutes
                                 let manualSign = manual > 0 ? "+\(manual)" : "\(manual)"
-                                
+
                                 if isPure {
                                     Text("0m (Offset Terkunci)")
                                         .font(.system(size: 10, weight: .medium))
                                         .foregroundColor(palette.secondaryText)
                                 } else {
-                                    Stepper("\(manualSign) menit", value: Binding(
+                                    Text("\(manualSign) menit")
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundColor(accent)
+                                    Stepper("", value: Binding(
                                         get: { pref.manualAdjustmentMinutes },
                                         set: { settings.update(prayer, manualAdjustmentMinutes: $0) }
                                     ), in: -5...5)
-                                    .font(.system(size: 11, weight: .medium))
-                                    .foregroundColor(accent)
+                                    .labelsHidden()
                                 }
                             }
                         }
@@ -250,7 +272,7 @@ public struct PrayerSettingsSheet: View {
                     .background(palette.cardBackground)
                     .cornerRadius(10)
                 }
-                
+
                 // Audio preview button
                 Button(action: {
                     if vm.audioManager.isPlaying {
@@ -276,7 +298,7 @@ public struct PrayerSettingsSheet: View {
         }
         .frame(maxHeight: 280)
     }
-    
+
     // MARK: - Tab 1: Lokasi
     @ViewBuilder
     private func lokasiTab(palette: IslandColorPalette, accent: Color) -> some View {
@@ -285,15 +307,52 @@ public struct PrayerSettingsSheet: View {
                 Text("Metode Deteksi Lokasi")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundColor(palette.primaryText)
-                
-                Picker("", selection: $settings.locationMode) {
-                    Text("Otomatis (Layanan Lokasi macOS)").tag(LocationMode.automaticGPS)
-                    Text("Pilihan Manual (Offline)").tag(LocationMode.manualPreset)
+
+                HStack(spacing: 8) {
+                    Button(action: {
+                        settings.locationMode = .automaticGPS
+                    }) {
+                        HStack(spacing: 5) {
+                            Image(systemName: settings.locationMode == .automaticGPS ? "largecircle.fill.circle" : "circle")
+                                .font(.system(size: 11))
+                                .foregroundColor(settings.locationMode == .automaticGPS ? accent : palette.secondaryText)
+                            Text("Otomatis (GPS)")
+                                .font(.system(size: 10.5, weight: settings.locationMode == .automaticGPS ? .bold : .medium))
+                                .foregroundColor(palette.primaryText)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .frame(maxWidth: .infinity)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(settings.locationMode == .automaticGPS ? accent.opacity(0.18) : palette.cardBackground)
+                        )
+                    }
+                    .buttonStyle(PlainButtonStyle())
+
+                    Button(action: {
+                        settings.locationMode = .manualPreset
+                    }) {
+                        HStack(spacing: 5) {
+                            Image(systemName: settings.locationMode == .manualPreset ? "largecircle.fill.circle" : "circle")
+                                .font(.system(size: 11))
+                                .foregroundColor(settings.locationMode == .manualPreset ? accent : palette.secondaryText)
+                            Text("Manual (Offline)")
+                                .font(.system(size: 10.5, weight: settings.locationMode == .manualPreset ? .bold : .medium))
+                                .foregroundColor(palette.primaryText)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .frame(maxWidth: .infinity)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(settings.locationMode == .manualPreset ? accent.opacity(0.18) : palette.cardBackground)
+                        )
+                    }
+                    .buttonStyle(PlainButtonStyle())
                 }
-                .pickerStyle(RadioGroupPickerStyle())
-                .foregroundColor(palette.primaryText)
             }
-            
+
             if settings.locationMode == .automaticGPS {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Status Layanan Lokasi:")
@@ -301,8 +360,8 @@ public struct PrayerSettingsSheet: View {
                         .foregroundColor(palette.secondaryText)
                     Text(vm.locationManager.statusMessage)
                         .font(.system(size: 11, weight: .regular))
-                        .foregroundColor(.cyan)
-                    
+                        .foregroundColor(palette.isDark ? .cyan : Color(red: 0.0, green: 0.45, blue: 0.7))
+
                     Button(action: {
                         vm.locationManager.requestSingleLocation()
                     }) {
@@ -328,7 +387,7 @@ public struct PrayerSettingsSheet: View {
                     Text("Pilih Kota:")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundColor(palette.secondaryText)
-                    
+
                     Picker("", selection: Binding(
                         get: { settings.selectedCity },
                         set: { city in
@@ -341,7 +400,7 @@ public struct PrayerSettingsSheet: View {
                         }
                     }
                     .pickerStyle(MenuPickerStyle())
-                    
+
                     Text("Mode manual 100% offline tanpa akses internet maupun Layanan Lokasi.")
                         .font(.system(size: 10))
                         .foregroundColor(palette.secondaryText)
@@ -352,13 +411,13 @@ public struct PrayerSettingsSheet: View {
                 .background(palette.cardBackground)
                 .cornerRadius(8)
             }
-            
+
             Spacer()
         }
         .padding(.top, 6)
         .frame(maxHeight: 280)
     }
-    
+
     // MARK: - Tab 2: Tampilan & Tema
     @ViewBuilder
     private func tampilanTab(palette: IslandColorPalette, accent: Color) -> some View {
@@ -366,30 +425,30 @@ public struct PrayerSettingsSheet: View {
             VStack(alignment: .leading, spacing: 14) {
                 // 1. Tema Preset
                 presetSection(palette: palette, accent: accent)
-                
+
                 // 2. Aksen Warna
                 accentSection(palette: palette, accent: accent)
-                
+
                 // 3. Live Preview
                 livePreviewSection(palette: palette, accent: accent)
-                
+
                 // 4. Sistem & Integrasi macOS (Launch at Login, Shortcut, Test Charger)
                 systemFeaturesSection(palette: palette, accent: accent)
-                
+
                 // 5. Reset Button
                 resetThemeButton(palette: palette)
             }
         }
         .frame(maxHeight: 280)
     }
-    
+
     @ViewBuilder
     private func systemFeaturesSection(palette: IslandColorPalette, accent: Color) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Sistem & Integrasi macOS:")
                 .font(.system(size: 11, weight: .bold))
                 .foregroundColor(palette.secondaryText)
-            
+
             VStack(spacing: 8) {
                 // Posisi Floating Island (Draggable)
                 HStack {
@@ -418,7 +477,7 @@ public struct PrayerSettingsSheet: View {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .fill(palette.cardBackground)
                 )
-                
+
                 // Launch at Login Toggle
                 HStack {
                     VStack(alignment: .leading, spacing: 1) {
@@ -444,7 +503,7 @@ public struct PrayerSettingsSheet: View {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .fill(palette.cardBackground)
                 )
-                
+
                 // Pin Music Toggle
                 HStack {
                     VStack(alignment: .leading, spacing: 1) {
@@ -477,13 +536,13 @@ public struct PrayerSettingsSheet: View {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .fill(palette.cardBackground)
                 )
-                
+
                 // Global Shortcut Info
                 HStack(spacing: 8) {
                     Image(systemName: "command.square.fill")
                         .font(.system(size: 16))
                         .foregroundColor(accent)
-                    
+
                     VStack(alignment: .leading, spacing: 1) {
                         Text("Pintasan Global: ⌘ + ⇧ + I")
                             .font(.system(size: 11, weight: .bold, design: .monospaced))
@@ -500,7 +559,7 @@ public struct PrayerSettingsSheet: View {
                         .fill(palette.cardBackground)
                 )
 
-                
+
                 // Charger Animation Test Button
                 Button(action: {
                     vm.collapse()
@@ -521,7 +580,7 @@ public struct PrayerSettingsSheet: View {
                     .cornerRadius(7)
                 }
                 .buttonStyle(PlainButtonStyle())
-                
+
                 // Universal Notification Controls (Jalur A, B, C)
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
@@ -534,7 +593,7 @@ public struct PrayerSettingsSheet: View {
                                 .foregroundColor(notifService.isAccessibilityAuthorized ? .green : .orange)
                         }
                         Spacer()
-                        
+
                         Button(action: {
                             notifService.checkAccessibilityStatus()
                         }) {
@@ -550,7 +609,7 @@ public struct PrayerSettingsSheet: View {
                             .cornerRadius(6)
                         }
                         .buttonStyle(PlainButtonStyle())
-                        
+
                         if !notifService.isAccessibilityAuthorized {
                             Button("Buka Pengaturan") {
                                 notifService.requestAccessibilityPermission()
@@ -564,13 +623,13 @@ public struct PrayerSettingsSheet: View {
                             .buttonStyle(PlainButtonStyle())
                         }
                     }
-                    
+
                     if !notifService.isAccessibilityAuthorized {
                         Text("💡 Jika toggle di System Settings sudah ON, klik tombol 'Cek Status' di atas atau restart aplikasi.")
                             .font(.system(size: 8.5))
                             .foregroundColor(palette.secondaryText.opacity(0.8))
                     }
-                    
+
                     // Tombol Uji Notifikasi
                     HStack(spacing: 6) {
                         Button("🧪 Tes WA") {
@@ -585,7 +644,7 @@ public struct PrayerSettingsSheet: View {
                         .background(Color.green.opacity(0.15))
                         .foregroundColor(.green)
                         .cornerRadius(6)
-                        
+
                         Button("🧪 Tes IG") {
                             vm.collapse()
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
@@ -598,7 +657,7 @@ public struct PrayerSettingsSheet: View {
                         .background(Color.pink.opacity(0.15))
                         .foregroundColor(.pink)
                         .cornerRadius(6)
-                        
+
                         Button("🧪 Tes Telegram") {
                             vm.collapse()
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
@@ -621,14 +680,14 @@ public struct PrayerSettingsSheet: View {
             }
         }
     }
-    
+
     @ViewBuilder
     private func presetSection(palette: IslandColorPalette, accent: Color) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Tema Latar Belakang:")
                 .font(.system(size: 11, weight: .bold))
                 .foregroundColor(palette.secondaryText)
-            
+
             HStack(spacing: 6) {
                 ForEach(IslandThemePreset.allCases) { preset in
                     presetButton(preset: preset, palette: palette, accent: accent)
@@ -636,7 +695,7 @@ public struct PrayerSettingsSheet: View {
             }
         }
     }
-    
+
     @ViewBuilder
     private func presetButton(preset: IslandThemePreset, palette: IslandColorPalette, accent: Color) -> some View {
         let isSelected = theme.preset == preset
@@ -663,26 +722,26 @@ public struct PrayerSettingsSheet: View {
         }
         .buttonStyle(PlainButtonStyle())
     }
-    
+
     @ViewBuilder
     private func accentSection(palette: IslandColorPalette, accent: Color) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Warna Aksen:")
                 .font(.system(size: 11, weight: .bold))
                 .foregroundColor(palette.secondaryText)
-            
+
             HStack(spacing: 8) {
                 ForEach(IslandAccentColor.allCases) { item in
                     accentSwatch(item: item, palette: palette)
                 }
             }
-            
+
             if theme.accentColor == .custom {
                 customHexRow(palette: palette, accent: accent)
             }
         }
     }
-    
+
     @ViewBuilder
     private func accentSwatch(item: IslandAccentColor, palette: IslandColorPalette) -> some View {
         let isSelected = theme.accentColor == item
@@ -695,7 +754,7 @@ public struct PrayerSettingsSheet: View {
                 Circle()
                     .fill(item.color(customHex: theme.customHex))
                     .frame(width: 26, height: 26)
-                
+
                 if isSelected {
                     Circle()
                         .stroke(palette.primaryText, lineWidth: 2)
@@ -707,21 +766,22 @@ public struct PrayerSettingsSheet: View {
         .buttonStyle(PlainButtonStyle())
         .help(item.displayName)
     }
-    
+
     @ViewBuilder
     private func customHexRow(palette: IslandColorPalette, accent: Color) -> some View {
         HStack(spacing: 8) {
             Text("Hex Code:")
                 .font(.system(size: 11, weight: .medium))
                 .foregroundColor(palette.secondaryText)
-            
+
             TextField("#00D2FF", text: $customHexInput, onCommit: {
                 theme.customHex = customHexInput
             })
             .textFieldStyle(RoundedBorderTextFieldStyle())
             .font(.system(size: 11, design: .monospaced))
+            .foregroundColor(palette.primaryText)
             .frame(width: 100)
-            
+
             Button("Terapkan") {
                 theme.customHex = customHexInput
             }
@@ -731,19 +791,19 @@ public struct PrayerSettingsSheet: View {
             .background(accent.opacity(0.2))
             .foregroundColor(accent)
             .cornerRadius(6)
-            
+
             Spacer()
         }
         .padding(.top, 2)
     }
-    
+
     @ViewBuilder
     private func livePreviewSection(palette: IslandColorPalette, accent: Color) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Live Preview:")
                 .font(.system(size: 11, weight: .bold))
                 .foregroundColor(palette.secondaryText)
-            
+
             HStack(spacing: 8) {
                 HStack(spacing: 6) {
                     Image(systemName: "sun.max.fill")
@@ -756,9 +816,9 @@ public struct PrayerSettingsSheet: View {
                         .font(.system(size: 10, design: .monospaced))
                         .foregroundColor(palette.secondaryText)
                 }
-                
+
                 Spacer()
-                
+
                 HStack(spacing: 3) {
                     Image(systemName: "hourglass")
                         .font(.system(size: 9))
@@ -786,7 +846,7 @@ public struct PrayerSettingsSheet: View {
             .shadow(color: accent.opacity(0.25), radius: 6, x: 0, y: 3)
         }
     }
-    
+
     @ViewBuilder
     private func resetThemeButton(palette: IslandColorPalette) -> some View {
         Button(action: {
