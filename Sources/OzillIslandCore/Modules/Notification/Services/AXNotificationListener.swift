@@ -2,111 +2,180 @@ import Foundation
 import AppKit
 import ApplicationServices
 
-/// Jalur A: Pemantau event banner notifikasi sistem macOS via Accessibility API (AXObserver).
+/// Jalur A: Pemantau event banner notifikasi sistem macOS via Accessibility API & Window Inspection.
 @MainActor
 public final class AXNotificationListener: ObservableObject {
     public static let shared = AXNotificationListener()
     
-    private var observer: AXObserver?
-    private var notificationCenterPID: pid_t?
+    private var observers: [AXObserver] = []
     private var isObserving: Bool = false
-    private var checkTimer: Timer?
+    private var pollTimer: Timer?
+    
+    /// Deduplikasi event sistem agar tidak berulang
+    private var recentBannerHashes: [String: Date] = [:]
     
     public init() {}
     
     public func startListening() {
         guard !isObserving else { return }
         
-        guard AXIsProcessTrusted() else {
-            NotificationIslandService.shared.checkAccessibilityStatus()
-            // Polling berkala jika pengguna nanti memberikan izin di System Settings
-            schedulePeriodicPermissionCheck()
-            return
-        }
-        
         NotificationIslandService.shared.checkAccessibilityStatus()
-        attachObserverToNotificationCenter()
-    }
-    
-    public func stopListening() {
-        if let obs = observer {
-            CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(obs), .commonModes)
-            observer = nil
-        }
-        isObserving = false
-        checkTimer?.invalidate()
-        checkTimer = nil
-    }
-    
-    private func schedulePeriodicPermissionCheck() {
-        checkTimer?.invalidate()
-        checkTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                guard let self = self else { return }
-                if AXIsProcessTrusted() {
-                    self.checkTimer?.invalidate()
-                    self.checkTimer = nil
-                    NotificationIslandService.shared.checkAccessibilityStatus()
-                    self.attachObserverToNotificationCenter()
-                }
-            }
-        }
-    }
-    
-    private func attachObserverToNotificationCenter() {
-        guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.notificationcenterui").first ??
-                        NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.usernoted").first else {
-            return
+        
+        if AXIsProcessTrusted() {
+            attachObservers()
         }
         
-        let pid = app.processIdentifier
-        self.notificationCenterPID = pid
-        
-        var newObserver: AXObserver?
-        let callback: AXObserverCallback = { observer, element, notification, refcon in
-            // Menangkap window banner baru yang muncul di notification center
-            DispatchQueue.main.async {
-                AXNotificationListener.shared.handleAXEvent(element: element)
-            }
-        }
-        
-        let err = AXObserverCreate(pid, callback, &newObserver)
-        guard err == .success, let obs = newObserver else {
-            return
-        }
-        
-        self.observer = obs
-        let appElement = AXUIElementCreateApplication(pid)
-        
-        AXObserverAddNotification(obs, appElement, kAXWindowCreatedNotification as CFString, nil)
-        CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(obs), .commonModes)
+        startPeriodicPolling()
         self.isObserving = true
     }
     
+    public func stopListening() {
+        for obs in observers {
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(obs), .commonModes)
+        }
+        observers.removeAll()
+        pollTimer?.invalidate()
+        pollTimer = nil
+        isObserving = false
+    }
+    
+    private func startPeriodicPolling() {
+        pollTimer?.invalidate()
+        let t = Timer(timeInterval: 1.5, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                
+                // Perbarui status izin
+                let trusted = AXIsProcessTrusted()
+                if trusted != NotificationIslandService.shared.isAccessibilityGranted {
+                    NotificationIslandService.shared.checkAccessibilityStatus()
+                    if trusted && self.observers.isEmpty {
+                        self.attachObservers()
+                    }
+                }
+                
+                guard trusted else { return }
+                self.pollActiveNotificationWindows()
+            }
+        }
+        RunLoop.main.add(t, forMode: .common)
+        self.pollTimer = t
+    }
+    
+    private func attachObservers() {
+        let bundleIDs = [
+            "com.apple.UserNotificationCenter",
+            "com.apple.notificationcenterui"
+        ]
+        
+        for bundleID in bundleIDs {
+            guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first else {
+                continue
+            }
+            
+            let pid = app.processIdentifier
+            var newObserver: AXObserver?
+            let callback: AXObserverCallback = { observer, element, notification, refcon in
+                DispatchQueue.main.async {
+                    AXNotificationListener.shared.handleAXEvent(element: element)
+                }
+            }
+            
+            let err = AXObserverCreate(pid, callback, &newObserver)
+            guard err == .success, let obs = newObserver else { continue }
+            
+            let appElement = AXUIElementCreateApplication(pid)
+            AXObserverAddNotification(obs, appElement, kAXWindowCreatedNotification as CFString, nil)
+            AXObserverAddNotification(obs, appElement, kAXFocusedUIElementChangedNotification as CFString, nil)
+            AXObserverAddNotification(obs, appElement, kAXValueChangedNotification as CFString, nil)
+            
+            CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(obs), .commonModes)
+            self.observers.append(obs)
+        }
+    }
+    
+    /// Polling berkala terhadap window banner aktif
+    private func pollActiveNotificationWindows() {
+        let cutoff = Date().addingTimeInterval(-15.0)
+        recentBannerHashes = recentBannerHashes.filter { $0.value > cutoff }
+        
+        let bundleIDs = [
+            "com.apple.UserNotificationCenter",
+            "com.apple.notificationcenterui"
+        ]
+        
+        for bundleID in bundleIDs {
+            guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first else {
+                continue
+            }
+            let appElem = AXUIElementCreateApplication(app.processIdentifier)
+            var windowsVal: AnyObject?
+            let err = AXUIElementCopyAttributeValue(appElem, kAXWindowsAttribute as CFString, &windowsVal)
+            guard err == .success, let windows = windowsVal as? [AXUIElement] else { continue }
+            
+            for win in windows {
+                handleAXEvent(element: win)
+            }
+        }
+    }
+    
     private func handleAXEvent(element: AXUIElement) {
+        var texts: [String] = []
+        extractTexts(from: element, depth: 0, maxDepth: 3, results: &texts)
+        
+        let combined = texts.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !combined.isEmpty else { return }
+        
+        let hash = combined
+        if let last = recentBannerHashes[hash], Date().timeIntervalSince(last) < 6.0 {
+            return
+        }
+        recentBannerHashes[hash] = Date()
+        
+        let titleStr = texts.first ?? "Notifikasi"
+        let descStr = texts.count > 1 ? texts.dropFirst().joined(separator: " - ") : "Pesan masuk baru"
+        
+        let appName = detectAppName(from: titleStr, desc: descStr)
+        let (icon, hex) = styleForApp(appName)
+        
+        let notif = IslandNotification(
+            appName: appName,
+            title: titleStr,
+            message: descStr,
+            iconSymbol: icon,
+            accentHex: hex,
+            duration: 5.0
+        )
+        NotificationIslandService.shared.postNotification(notif)
+    }
+    
+    private func extractTexts(from element: AXUIElement, depth: Int, maxDepth: Int, results: inout [String]) {
+        guard depth <= maxDepth else { return }
+        
         var titleVal: AnyObject?
+        var valVal: AnyObject?
         var descVal: AnyObject?
         
-        // Baca atribut title dan description dari window/elemen yang baru dibuat
         AXUIElementCopyAttributeValue(element, kAXTitleAttribute as CFString, &titleVal)
+        AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &valVal)
         AXUIElementCopyAttributeValue(element, kAXDescriptionAttribute as CFString, &descVal)
         
-        let titleStr = (titleVal as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let descStr = (descVal as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if let t = (titleVal as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty, !results.contains(t) {
+            results.append(t)
+        }
+        if let v = (valVal as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !v.isEmpty, !results.contains(v) {
+            results.append(v)
+        }
+        if let d = (descVal as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !d.isEmpty, !results.contains(d) {
+            results.append(d)
+        }
         
-        // Jika ada text terdeteksi
-        if !titleStr.isEmpty || !descStr.isEmpty {
-            let appName = detectAppName(from: titleStr, desc: descStr)
-            let (icon, hex) = styleForApp(appName)
-            
-            let notif = IslandNotification(
-                appName: appName,
-                title: titleStr.isEmpty ? appName : titleStr,
-                message: descStr.isEmpty ? "Pesan masuk baru" : descStr,
-                iconSymbol: icon,
-                accentHex: hex
-            )
-            NotificationIslandService.shared.postNotification(notif)
+        var childrenVal: AnyObject?
+        if AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &childrenVal) == .success,
+           let children = childrenVal as? [AXUIElement] {
+            for child in children.prefix(8) {
+                extractTexts(from: child, depth: depth + 1, maxDepth: maxDepth, results: &results)
+            }
         }
     }
     
@@ -118,7 +187,7 @@ public final class AXNotificationListener: ObservableObject {
         if combined.contains("slack") { return "Slack" }
         if combined.contains("mail") { return "Mail" }
         if combined.contains("discord") { return "Discord" }
-        return "Notifikasi"
+        return "Notifikasi Sistem"
     }
     
     private func styleForApp(_ app: String) -> (String, String) {

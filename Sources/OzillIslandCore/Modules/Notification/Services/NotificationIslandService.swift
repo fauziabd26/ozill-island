@@ -11,6 +11,7 @@ public final class NotificationIslandService: ObservableObject {
     @Published public private(set) var activeNotification: IslandNotification?
     @Published public private(set) var recentNotifications: [IslandNotification] = []
     @Published public private(set) var isAccessibilityAuthorized: Bool = false
+    public var isAccessibilityGranted: Bool { isAccessibilityAuthorized }
     
     private var dismissTask: Task<Void, Never>?
     
