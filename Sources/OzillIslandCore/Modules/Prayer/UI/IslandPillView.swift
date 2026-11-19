@@ -43,19 +43,28 @@ public struct IslandPillView: View {
                     insertion: .opacity.combined(with: .scale(scale: 0.92, anchor: .top)),
                     removal: .opacity.combined(with: .scale(scale: 0.92, anchor: .top))
                 ))
-                // Gesture Geser (Drag ke kiri, kanan, atas, bawah) saat mode collapsed
-                .gesture(
-                    DragGesture(minimumDistance: 4, coordinateSpace: .global)
+                // Gestur Geser Bebas (Drag) dan Klik (Tap to Expand / Action)
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 3, coordinateSpace: .global)
                         .onChanged { value in
-                            if !isDragging {
-                                isDragging = true
-                                IslandWindowController.shared.startDrag()
+                            let dist = hypot(value.translation.width, value.translation.height)
+                            if dist >= 6 {
+                                if !isDragging {
+                                    isDragging = true
+                                    IslandWindowController.shared.startDrag()
+                                }
+                                IslandWindowController.shared.updateDrag(translation: value.translation)
                             }
-                            IslandWindowController.shared.updateDrag(translation: value.translation)
                         }
                         .onEnded { value in
-                            isDragging = false
-                            IslandWindowController.shared.endDrag(translation: value.translation)
+                            let dist = hypot(value.translation.width, value.translation.height)
+                            if isDragging && dist >= 6 {
+                                isDragging = false
+                                IslandWindowController.shared.endDrag(translation: value.translation)
+                            } else {
+                                isDragging = false
+                                handlePillTap()
+                            }
                         }
                 )
             case .expanded:
@@ -82,5 +91,10 @@ public struct IslandPillView: View {
                 dimmer.recordActivity()
             }
         }
+    }
+    
+    private func handlePillTap() {
+        dimmer.recordActivity()
+        vm.expand()
     }
 }

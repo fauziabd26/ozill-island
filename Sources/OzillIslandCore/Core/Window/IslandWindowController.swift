@@ -8,7 +8,6 @@ public final class IslandWindowController: NSObject {
     private var panel: IslandPanel?
     private var hostingView: IslandHostingView<IslandPillView>?
     private var globalClickMonitor: Any?
-    private var localClickMonitor: Any?
     
     // MARK: - Dragging & Custom Positioning
     private let kUserOffsetXKey = "OzillIsland_UserOffsetX"
@@ -123,14 +122,6 @@ public final class IslandWindowController: NSObject {
                 }
             }
         }
-        if localClickMonitor == nil {
-            localClickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
-                Task { @MainActor [weak self] in
-                    self?.handlePotentialClickOutside()
-                }
-                return event
-            }
-        }
     }
     
     private func handlePotentialClickOutside() {
@@ -168,10 +159,10 @@ public final class IslandWindowController: NSObject {
         PrayerIslandViewModel.shared.toggle()
     }
     
-    // MARK: - Smooth Anchor-Aware Frame Update (Top-Center Pinned)
+    // MARK: - Deterministic Smooth Frame Update (Top-Center Pinned)
     
     public func updateFrame(for state: IslandState, animated: Bool = true) {
-        guard let panel = panel, let screen = NSScreen.main else { return }
+        guard let panel = panel else { return }
         
         let targetWidth: CGFloat
         let targetHeight: CGFloat
@@ -188,35 +179,11 @@ public final class IslandWindowController: NSObject {
             targetHeight = 425
         }
         
-        let currentFrame = panel.frame
-        let visibleFrame = screen.visibleFrame
-        
-        // PENTING: Pertahankan titik jangkar top-center agar ekspansi dan kolaps
-        // mekar / menggulung secara mulus dari posisi atas Island saat ini
-        let currentTopCenter = CGPoint(
-            x: currentFrame.origin.x + currentFrame.width / 2,
-            y: currentFrame.origin.y + currentFrame.height
-        )
-        
-        var targetX = currentTopCenter.x - targetWidth / 2
-        var targetY = currentTopCenter.y - targetHeight
-        
-        // Jika belum ada posisi sebelumnya atau di luar batas, gunakan kalkulasi frame berbasis offset
-        if currentFrame.width < 10 || currentFrame.height < 10 {
-            let baseFrame = calculateFrame(width: targetWidth, height: targetHeight)
-            targetX = baseFrame.origin.x
-            targetY = baseFrame.origin.y
-        } else {
-            // Clamp agar tidak keluar dari visible frame layar
-            targetX = max(visibleFrame.origin.x + 8, min(visibleFrame.origin.x + visibleFrame.width - targetWidth - 8, targetX))
-            targetY = max(visibleFrame.origin.y + 8, min(visibleFrame.origin.y + visibleFrame.height - targetHeight - 2, targetY))
-        }
-        
-        let targetFrame = NSRect(x: targetX, y: targetY, width: targetWidth, height: targetHeight)
+        let targetFrame = calculateFrame(width: targetWidth, height: targetHeight)
         
         if animated {
             NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.40
+                context.duration = 0.38
                 context.timingFunction = CAMediaTimingFunction(controlPoints: 0.16, 1.0, 0.3, 1.0)
                 context.allowsImplicitAnimation = true
                 panel.animator().setFrame(targetFrame, display: true)
