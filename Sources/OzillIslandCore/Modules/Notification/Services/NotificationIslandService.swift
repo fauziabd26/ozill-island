@@ -3,7 +3,7 @@ import SwiftUI
 import AppKit
 import ApplicationServices
 
-/// Layanan terpusat pengelola notifikasi yang masuk ke Ozill Island (Jalur A, B, dan C).
+/// Layanan terpusat pengelola notifikasi yang masuk ke Ozill Island (Jalur A, B, dan C) dengan physics animasi fluid.
 @MainActor
 public final class NotificationIslandService: ObservableObject {
     public static let shared = NotificationIslandService()
@@ -13,7 +13,11 @@ public final class NotificationIslandService: ObservableObject {
     @Published public private(set) var isAccessibilityAuthorized: Bool = false
     public var isAccessibilityGranted: Bool { isAccessibilityAuthorized }
     
+    /// Menyimpan sisa waktu durasi untuk interaksi hover pause
+    @Published public private(set) var isHoverPaused: Bool = false
     private var dismissTask: Task<Void, Never>?
+    private var notificationStartTime: Date?
+    private var remainingDuration: TimeInterval = 5.0
     
     public init() {
         checkAccessibilityStatus()
@@ -40,7 +44,7 @@ public final class NotificationIslandService: ObservableObject {
         }
     }
     
-    /// Menerbitkan notifikasi baru ke Island (Jalur A, B, atau C)
+    /// Menerbitkan notifikasi baru ke Island (Jalur A, B, atau C) dengan animasi spring fluid
     public func postNotification(_ notification: IslandNotification) {
         // Simpan ke riwayat (maksimal 30 entri)
         if !recentNotifications.contains(where: { $0.id == notification.id }) {
@@ -52,22 +56,50 @@ public final class NotificationIslandService: ObservableObject {
         
         // Batalkan timer dismiss sebelumnya jika ada
         dismissTask?.cancel()
+        isHoverPaused = false
+        remainingDuration = notification.duration
+        notificationStartTime = Date()
         
-        withAnimation(.spring(response: 0.38, dampingFraction: 0.72)) {
+        // Fluid spring curve ala Apple Dynamic Island
+        withAnimation(.spring(response: 0.44, dampingFraction: 0.76)) {
             self.activeNotification = notification
         }
         
-        // Bunyi chime halus
-        NSSound(named: "Tink")?.play()
+        // Suara notifikasi halus & modern (Purr / Pop / Blow)
+        playPleasantNotificationSound()
         
-        // Auto-dismiss setelah durasi selesai
+        scheduleAutoDismiss(duration: notification.duration, targetId: notification.id)
+    }
+    
+    /// Menjeda hitung mundur auto-dismiss saat mouse hover
+    public func pauseDismiss() {
+        guard let notif = activeNotification, !isHoverPaused else { return }
+        isHoverPaused = true
+        dismissTask?.cancel()
+        
+        if let start = notificationStartTime {
+            let elapsed = Date().timeIntervalSince(start)
+            remainingDuration = max(2.0, notif.duration - elapsed)
+        }
+    }
+    
+    /// Melanjutkan hitung mundur auto-dismiss saat mouse keluar dari island
+    public func resumeDismiss() {
+        guard let notif = activeNotification, isHoverPaused else { return }
+        isHoverPaused = false
+        notificationStartTime = Date()
+        scheduleAutoDismiss(duration: remainingDuration, targetId: notif.id)
+    }
+    
+    private func scheduleAutoDismiss(duration: TimeInterval, targetId: UUID) {
+        dismissTask?.cancel()
         dismissTask = Task {
-            let nanos = UInt64(notification.duration * 1_000_000_000)
+            let nanos = UInt64(max(0.5, duration) * 1_000_000_000)
             try? await Task.sleep(nanoseconds: nanos)
             guard !Task.isCancelled else { return }
             await MainActor.run {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                    if self.activeNotification?.id == notification.id {
+                withAnimation(.spring(response: 0.38, dampingFraction: 0.84)) {
+                    if self.activeNotification?.id == targetId && !self.isHoverPaused {
                         self.activeNotification = nil
                     }
                 }
@@ -75,11 +107,19 @@ public final class NotificationIslandService: ObservableObject {
         }
     }
     
-    /// Menutup notifikasi aktif seketika (saat diklik atau di-swipe)
+    /// Menutup notifikasi aktif seketika (saat tombol 'X' diklik)
     public func dismissActiveNotification() {
         dismissTask?.cancel()
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+        isHoverPaused = false
+        withAnimation(.spring(response: 0.34, dampingFraction: 0.85)) {
             self.activeNotification = nil
+        }
+    }
+    
+    private func playPleasantNotificationSound() {
+        if let sound = NSSound(named: "Purr") ?? NSSound(named: "Pop") ?? NSSound(named: "Blow") {
+            sound.volume = 0.65
+            sound.play()
         }
     }
     
@@ -99,23 +139,23 @@ public final class NotificationIslandService: ObservableObject {
             notif = IslandNotification(
                 appName: "Instagram",
                 title: "alex_creative",
-                message: "Menyukai cerita Anda dan mengirim pesan",
+                message: "Liked your story and sent a photo",
                 iconSymbol: "camera.fill",
-                accentHex: "#E1306C" // Instagram Pink/Magenta
+                accentHex: "#E1306C" // Instagram Pink
             )
         case "telegram":
             notif = IslandNotification(
                 appName: "Telegram",
-                title: "Komunitas Swift Developer",
-                message: "Xcode 16.2 Release Candidate resmi dirilis hari ini!",
+                title: "Komunitas Dev ID",
+                message: "Swift 6 update preview sudah dirilis cuy!",
                 iconSymbol: "paperplane.fill",
                 accentHex: "#2AABEE" // Telegram Blue
             )
         default:
             notif = IslandNotification(
-                appName: "Pesan Sistem",
-                title: "Pengingat Otomatis",
-                message: "Ozill Island siap menyambut notifikasi barumu.",
+                appName: "Sistem",
+                title: "Pemberitahuan",
+                message: "Notifikasi pengujian berhasil diterima.",
                 iconSymbol: "bell.fill",
                 accentHex: "#00D2FF"
             )

@@ -19,24 +19,23 @@ public struct IslandPillView: View {
         Group {
             switch vm.state {
             case .collapsed:
-                if let activeNotif = notifService.activeNotification {
-                    NotificationBannerPill(notification: activeNotif)
-                        .transition(.asymmetric(
-                            insertion: .opacity.combined(with: .scale(scale: 0.95)),
-                            removal: .opacity.combined(with: .scale(scale: 0.95))
-                        ))
-                } else if router.currentMode == .music {
-                    CollapsedMusicPill()
-                        .transition(.asymmetric(
-                            insertion: .opacity.combined(with: .scale(scale: 0.95)),
-                            removal: .opacity.combined(with: .scale(scale: 0.95))
-                        ))
-                } else {
-                    CollapsedPrayerPill(vm: vm)
-                        .transition(.asymmetric(
-                            insertion: .opacity.combined(with: .scale(scale: 0.95)),
-                            removal: .opacity.combined(with: .scale(scale: 0.95))
-                        ))
+                ZStack {
+                    if let activeNotif = notifService.activeNotification {
+                        NotificationBannerPill(notification: activeNotif)
+                            .transition(.asymmetric(
+                                insertion: .opacity.combined(with: .scale(scale: 0.94)).combined(with: .offset(y: -3)),
+                                removal: .opacity.combined(with: .scale(scale: 0.95)).combined(with: .offset(y: 3))
+                            ))
+                            .zIndex(2)
+                    } else if router.currentMode == .music {
+                        CollapsedMusicPill()
+                            .transition(.opacity.combined(with: .scale(scale: 0.97)))
+                            .zIndex(1)
+                    } else {
+                        CollapsedPrayerPill(vm: vm)
+                            .transition(.opacity.combined(with: .scale(scale: 0.97)))
+                            .zIndex(0)
+                    }
                 }
             case .expanded:
                 ExpandedHubSheet(vm: vm)
@@ -54,9 +53,9 @@ public struct IslandPillView: View {
         }
         .opacity(dimmer.currentOpacity)
         .animation(.easeInOut(duration: dimmer.isDimmed ? 0.8 : 0.35), value: dimmer.isDimmed)
-        .animation(.spring(response: 0.38, dampingFraction: 0.82), value: vm.state)
-        .animation(.spring(response: 0.38, dampingFraction: 0.82), value: router.currentMode)
-        .animation(.spring(response: 0.38, dampingFraction: 0.82), value: notifService.activeNotification)
+        .animation(.spring(response: 0.42, dampingFraction: 0.78), value: vm.state)
+        .animation(.spring(response: 0.42, dampingFraction: 0.78), value: router.currentMode)
+        .animation(.spring(response: 0.42, dampingFraction: 0.78), value: notifService.activeNotification)
         .onHover { hovering in
             if hovering {
                 dimmer.recordActivity()
