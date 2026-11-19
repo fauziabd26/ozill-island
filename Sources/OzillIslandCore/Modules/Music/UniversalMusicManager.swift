@@ -72,15 +72,12 @@ public final class UniversalMusicManager: ObservableObject {
         if let manualId = manualSelectedProviderId,
            let manualMatch = providers.first(where: { $0.identifier == manualId && $0.isAvailable }) {
             let state = await manualMatch.fetchPlaybackState()
-            if let snap = await manualMatch.fetchSnapshot() {
-                candidateProvider = manualMatch
-                candidateItem = snap
-                candidateState = state
-            }
-        }
-        
-        // 2. Jika tidak ada seleksi manual atau tidak aktif, cari provider yang sedang .playing
-        if candidateItem == nil {
+            let snap = await manualMatch.fetchSnapshot()
+            candidateProvider = manualMatch
+            candidateItem = snap
+            candidateState = state
+        } else if manualSelectedProviderId == nil {
+            // 2. Jika tidak ada seleksi manual, cari provider yang sedang .playing
             for prov in providers where prov.isAvailable {
                 let state = await prov.fetchPlaybackState()
                 if state.isPlaying, let snap = await prov.fetchSnapshot() {
@@ -90,24 +87,24 @@ public final class UniversalMusicManager: ObservableObject {
                     break
                 }
             }
-        }
-        
-        // 3. Fallback: Provider yang sedang paused (punya track)
-        if candidateItem == nil {
-            for prov in providers where prov.isAvailable {
-                if let snap = await prov.fetchSnapshot() {
-                    let state = await prov.fetchPlaybackState()
-                    candidateProvider = prov
-                    candidateItem = snap
-                    candidateState = state
-                    break
+            
+            // 3. Fallback: Provider yang sedang paused (punya track)
+            if candidateItem == nil {
+                for prov in providers where prov.isAvailable {
+                    if let snap = await prov.fetchSnapshot() {
+                        let state = await prov.fetchPlaybackState()
+                        candidateProvider = prov
+                        candidateItem = snap
+                        candidateState = state
+                        break
+                    }
                 }
             }
         }
         
         // 4. Fallback ke last known item / provider jika masih dalam grace period (60 detik) atau sedang di-PIN!
         if candidateItem == nil {
-            if let last = lastKnownItem, let lastProv = lastKnownProvider {
+            if manualSelectedProviderId == nil, let last = lastKnownItem, let lastProv = lastKnownProvider {
                 let elapsed = lastActiveMediaTimestamp.map { Date().timeIntervalSince($0) } ?? 0
                 if isPinnedToMusic || elapsed < 60.0 {
                     candidateProvider = lastProv
@@ -199,5 +196,24 @@ public final class UniversalMusicManager: ObservableObject {
         Task {
             await pollActiveMedia()
         }
+    }
+    
+    /// Memilih tab/sesi browser spesifik secara manual dan langsung memperbarui status aktif
+    public func selectBrowserSession(id: String) {
+        browserProvider.selectSession(id: id)
+        Task {
+            await pollActiveMedia()
+        }
+    }
+    
+    /// Mengosongkan sesi aktif dan cache fallback (untuk reset atau pengujian)
+    public func clearActiveSession() {
+        self.activeProvider = nil
+        self.currentItem = nil
+        self.playbackState = .stopped
+        self.lastKnownItem = nil
+        self.lastKnownProvider = nil
+        self.lastActiveMediaTimestamp = nil
+        self.manualSelectedProviderId = nil
     }
 }

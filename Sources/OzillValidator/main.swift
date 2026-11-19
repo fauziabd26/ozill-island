@@ -981,6 +981,7 @@ struct OzillValidatorApp {
             var mockSessions: [BrowserMediaSession] = []
             var isRunning: Bool = true
             var lastAction: String?
+            var lastSessionId: String?
             
             var isBrowserRunning: Bool { isRunning }
             
@@ -1001,10 +1002,10 @@ struct OzillValidatorApp {
                 return mockSessions
             }
             
-            func playPause(sessionId: String) async throws { lastAction = "playPause" }
-            func next(sessionId: String) async throws { lastAction = "next" }
-            func previous(sessionId: String) async throws { lastAction = "previous" }
-            func seek(to seconds: TimeInterval, sessionId: String) async throws { lastAction = "seek" }
+            func playPause(sessionId: String) async throws { lastAction = "playPause"; lastSessionId = sessionId }
+            func next(sessionId: String) async throws { lastAction = "next"; lastSessionId = sessionId }
+            func previous(sessionId: String) async throws { lastAction = "previous"; lastSessionId = sessionId }
+            func seek(to seconds: TimeInterval, sessionId: String) async throws { lastAction = "seek"; lastSessionId = sessionId }
         }
 
         // Assertion 29: Browser Adapter Capability & Honest Reporting
@@ -1365,10 +1366,115 @@ struct OzillValidatorApp {
             assert(!unavailableState.isAvailable)
         }
 
+        // Assertion 41: Fase 3B - Media Control Previous/Next/PlayPause, Capabilities, Chrome Multi-Tab Manual Selection
+        await runAsyncTest("Fase 3B: Media Control Previous/Next/PlayPause, Capabilities, Chrome Multi-Tab Manual Selection") {
+            let manager = UniversalMusicManager.shared
+            manager.clearActiveSession()
+            
+            // 1. Skenario Tidak Ada Provider Aktif (Empty State)
+            let emptyMock = MockMusicProvider(
+                identifier: "mock.empty",
+                displayName: "Empty Provider",
+                isAvailable: true,
+                capabilities: [],
+                initialTracks: []
+            )
+            emptyMock.setPlaybackState(.stopped)
+            manager.mockProvider = emptyMock
+            manager.selectProvider(id: "mock.empty")
+            await manager.pollActiveMedia()
+            
+            assert(manager.currentItem == nil, "Saat provider kosong, currentItem harus nil")
+            assert(manager.playbackState == .stopped, "State harus .stopped saat tidak ada media aktif")
+            
+            // 2. Skenario Provider dengan Kapabilitas Parsial (Hanya Play/Pause, Tanpa Next/Previous)
+            let limitedMock = MockMusicProvider(
+                identifier: "mock.limited",
+                displayName: "Limited Player",
+                isAvailable: true,
+                capabilities: [.playPause]
+            )
+            limitedMock.setPlaybackState(.paused)
+            manager.mockProvider = limitedMock
+            manager.selectProvider(id: "mock.limited")
+            await manager.pollActiveMedia()
+            
+            assert(manager.activeProvider?.capabilities.contains(.playPause) == true)
+            assert(manager.activeProvider?.capabilities.contains(.skipNext) == false, "Limited player tidak boleh memiliki skipNext")
+            assert(manager.activeProvider?.capabilities.contains(.skipPrevious) == false, "Limited player tidak boleh memiliki skipPrevious")
+            
+            // 3. Play/Pause state toggle
+            await manager.playPause()
+            assert(manager.playbackState == .playing, "playPause() harus mengubah state paused -> playing")
+            await manager.playPause()
+            assert(manager.playbackState == .paused, "playPause() kedua harus mengubah playing -> paused")
+            
+            // 4. Skenario Multi-Tab Chrome: Tab 1 (Sedang Playing Otomatis) vs Tab 2 (Manual Selection)
+            let sessionTab1 = BrowserMediaSession(
+                id: "chrome::1::1",
+                browserBundleId: "com.google.Chrome",
+                browserName: "Google Chrome",
+                tabTitle: "Video Otomatis Diputar",
+                urlString: "https://www.youtube.com/watch?v=auto123",
+                nowPlaying: NowPlayingItem(title: "Video Otomatis", artist: "Channel A", source: .browser),
+                isPlaying: true,
+                isYouTube: true,
+                isYouTubeMusic: false
+            )
+            let sessionTab2 = BrowserMediaSession(
+                id: "chrome::1::2",
+                browserBundleId: "com.google.Chrome",
+                browserName: "Google Chrome",
+                tabTitle: "Video Pilihan Manual Pengguna",
+                urlString: "https://www.youtube.com/watch?v=manual456",
+                nowPlaying: NowPlayingItem(title: "Video Manual Pilihan", artist: "Channel B", source: .browser),
+                isPlaying: false,
+                isYouTube: true,
+                isYouTubeMusic: false
+            )
+            
+            let mockChromeAdapter = MockBrowserAdapter(
+                bundleId: "com.google.Chrome",
+                name: "Google Chrome",
+                caps: [.playPause, .skipNext, .skipPrevious, .seek],
+                sessions: [sessionTab1, sessionTab2]
+            )
+            let browserProvider = BrowserMusicProvider(adapters: [mockChromeAdapter])
+            _ = await browserProvider.fetchAllSessions(force: true)
+            
+            // A. Sebelum seleksi manual: default resolusi harus memilih Tab 1 karena isPlaying == true
+            let autoSnap = await browserProvider.fetchSnapshot()
+            assert(autoSnap?.title == "Video Otomatis", "Secara default polling harus memprioritaskan tab yang playing")
+            
+            // B. User memilih Tab 2 secara manual
+            browserProvider.selectSession(id: "chrome::1::2")
+            let manualSnap = await browserProvider.fetchSnapshot()
+            assert(manualSnap?.title == "Video Manual Pilihan", "Seleksi manual harus meng-override prioritas polling otomatis!")
+            
+            // C. Eksekusi kontrol (Previous, Next, Play/Pause) harus diarahkan ke Tab 2 (chrome::1::2)
+            try await browserProvider.playPause()
+            assert(mockChromeAdapter.lastSessionId == "chrome::1::2", "playPause() harus menargetkan tab yang dipilih manual (chrome::1::2), bukan tab 1!")
+            assert(mockChromeAdapter.lastAction == "playPause")
+            
+            try await browserProvider.next()
+            assert(mockChromeAdapter.lastSessionId == "chrome::1::2", "next() harus menargetkan tab yang dipilih manual (chrome::1::2)!")
+            assert(mockChromeAdapter.lastAction == "next")
+            
+            try await browserProvider.previous()
+            assert(mockChromeAdapter.lastSessionId == "chrome::1::2", "previous() harus menargetkan tab yang dipilih manual (chrome::1::2)!")
+            assert(mockChromeAdapter.lastAction == "previous")
+            
+            // 5. Bersihkan state mock
+            manager.mockProvider = nil
+            manager.selectProvider(id: nil)
+            manager.clearActiveSession()
+            await manager.pollActiveMedia()
+        }
+
         print("""
 
         ================================================================================
-           HASIL FINAL FASE 2 + FASE 3A (AUDIO CONTROL) VALIDATION:
+           HASIL FINAL FASE 2 + FASE 3A & 3B (AUDIO & MEDIA CONTROL) VALIDATION:
            1. Magic numbers (86400, 15, 45) diganti konstanta bernama bertipe TimeInterval.
            2. Deduplikasi Adzan diperkuat menggunakan Set<String> dengan pemangkasan memori.
            3. Sleep/Wake mencatat MissedPrayerOccurrence terstruktur (nama, waktu, zona).
@@ -1395,7 +1501,8 @@ struct OzillValidatorApp {
            24. Item D: Launch at Login Manager & Global Shortcut Registration (Assertion 38 PASS).
            25. Universal Notification Island: Integrasi Jalur A (AXObserver), B (Browser Web), C (Sistem) (Assertion 39 PASS).
            26. Fase 3A: AudioController Clamping, +/- 0.05 Step, Mute Toggle & State Isolation (Assertion 40 PASS).
-           27. Seluruh 40 Automated Validation Assertions BERHASIL (PASS).
+           27. Fase 3B: MediaControl Previous/Next/PlayPause, Capabilities, Chrome Multi-Tab Manual Routing (Assertion 41 PASS).
+           28. Seluruh 41 Automated Validation Assertions BERHASIL (PASS).
         ================================================================================
         """)
     }
