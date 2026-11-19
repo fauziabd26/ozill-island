@@ -123,7 +123,7 @@ public struct TimerControlView: View {
 
         VStack(alignment: .leading, spacing: 8) {
             // Header
-            HStack {
+            HStack(spacing: 8) {
                 Image(systemName: "timer")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundColor(isRunning ? accent : palette.primaryText)
@@ -137,36 +137,97 @@ public struct TimerControlView: View {
                 Text(isCompleted ? "SELESAI! 🎉" : (isRunning ? "Sedang Berjalan" : (timerService.state == .paused ? "Dijeda" : "Siap")))
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundColor(isCompleted ? .green : (isRunning ? accent : palette.secondaryText))
+
+                // Drag Handle Card (Sejajar dan tidak bertabrakan dengan kata status)
+                Image(systemName: "line.3.horizontal")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(palette.secondaryText.opacity(0.5))
+                    .help("Tahan & seret untuk mengatur posisi kartu ini")
             }
 
-            // Preset Pills
+            // Atur Durasi Waktu Sendiri (Pengganti Tab Preset)
             HStack(spacing: 6) {
-                ForEach(TimerPreset.allCases) { preset in
-                    let isSelected = timerService.currentPreset == preset
-                    Button(action: {
-                        withAnimation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.78)) {
-                            timerService.selectPreset(preset)
-                        }
-                    }) {
-                        HStack(spacing: 4) {
-                            Image(systemName: preset.sfSymbol)
-                                .font(.system(size: 9))
-                            Text(preset.rawValue)
-                                .font(.system(size: 10, weight: isSelected ? .bold : .medium))
-                        }
-                        .foregroundColor(isSelected ? .white : palette.secondaryText)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4.5)
-                        .frame(maxWidth: .infinity)
-                        .background(
-                            isSelected ?
-                            AnyView(Capsule(style: .continuous).fill(accent)) :
-                            AnyView(Capsule(style: .continuous).fill(palette.background.opacity(0.6)))
-                        )
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                    .help("Atur timer ke \(preset.rawValue)")
+                Text("Durasi:")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(palette.secondaryText)
+
+                Spacer()
+
+                // Tombol -5 Menit
+                Button(action: {
+                    timerService.adjustMinutes(by: -5)
+                }) {
+                    Text("-5m")
+                        .font(.system(size: 9.5, weight: .bold))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3.5)
+                        .background(palette.background.opacity(0.7))
+                        .foregroundColor(palette.primaryText)
+                        .cornerRadius(6)
                 }
+                .buttonStyle(PlainButtonStyle())
+                .disabled(isRunning)
+                .help("Kurangi 5 menit")
+
+                // Tombol -1 Menit
+                Button(action: {
+                    timerService.adjustMinutes(by: -1)
+                }) {
+                    Image(systemName: "minus")
+                        .font(.system(size: 9, weight: .bold))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 4.5)
+                        .background(palette.background.opacity(0.7))
+                        .foregroundColor(palette.primaryText)
+                        .cornerRadius(6)
+                }
+                .buttonStyle(PlainButtonStyle())
+                .disabled(isRunning)
+                .help("Kurangi 1 menit")
+
+                // Display Angka Durasi Terpilih
+                HStack(spacing: 3) {
+                    Text("\(timerService.targetMinutes)")
+                        .font(.system(size: 12, weight: .bold, design: .monospaced))
+                    Text("mnt")
+                        .font(.system(size: 9.5, weight: .medium))
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(Capsule(style: .continuous).fill(accent.opacity(0.2)))
+                .foregroundColor(accent)
+
+                // Tombol +1 Menit
+                Button(action: {
+                    timerService.adjustMinutes(by: 1)
+                }) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 9, weight: .bold))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 4.5)
+                        .background(palette.background.opacity(0.7))
+                        .foregroundColor(palette.primaryText)
+                        .cornerRadius(6)
+                }
+                .buttonStyle(PlainButtonStyle())
+                .disabled(isRunning)
+                .help("Tambah 1 menit")
+
+                // Tombol +5 Menit
+                Button(action: {
+                    timerService.adjustMinutes(by: 5)
+                }) {
+                    Text("+5m")
+                        .font(.system(size: 9.5, weight: .bold))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3.5)
+                        .background(palette.background.opacity(0.7))
+                        .foregroundColor(palette.primaryText)
+                        .cornerRadius(6)
+                }
+                .buttonStyle(PlainButtonStyle())
+                .disabled(isRunning)
+                .help("Tambah 5 menit")
             }
 
             // Timer Display & Controls Row

@@ -611,29 +611,6 @@ public struct PrayerSettingsSheet: View {
                         .fill(palette.cardBackground)
                 )
 
-                // Global Shortcut Info
-                HStack(spacing: 8) {
-                    Image(systemName: "command.square.fill")
-                        .font(.system(size: 16))
-                        .foregroundColor(accent)
-
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text("Pintasan Global: ⌘ + ⇧ + I")
-                            .font(.system(size: 11, weight: .bold, design: .monospaced))
-                            .foregroundColor(palette.primaryText)
-                        Text("Buka atau tutup Ozill Island dari aplikasi mana saja")
-                            .font(.system(size: 9))
-                            .foregroundColor(palette.secondaryText)
-                    }
-                    Spacer()
-                }
-                .padding(8)
-                .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(palette.cardBackground)
-                )
-
-
                 // Charger Animation Test Button
                 Button(action: {
                     vm.collapse()
@@ -702,48 +679,6 @@ public struct PrayerSettingsSheet: View {
                         Text("💡 Jika toggle di System Settings sudah ON, klik tombol 'Cek Status' di atas atau restart aplikasi.")
                             .font(.system(size: 8.5))
                             .foregroundColor(palette.secondaryText.opacity(0.8))
-                    }
-
-                    // Tombol Uji Notifikasi
-                    HStack(spacing: 6) {
-                        Button("🧪 Tes WA") {
-                            vm.collapse()
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                                notifService.simulateNotification(type: "whatsapp")
-                            }
-                        }
-                        .font(.system(size: 9.5, weight: .semibold))
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3.5)
-                        .background(Color.green.opacity(0.15))
-                        .foregroundColor(.green)
-                        .cornerRadius(6)
-
-                        Button("🧪 Tes IG") {
-                            vm.collapse()
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                                notifService.simulateNotification(type: "instagram")
-                            }
-                        }
-                        .font(.system(size: 9.5, weight: .semibold))
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3.5)
-                        .background(Color.pink.opacity(0.15))
-                        .foregroundColor(.pink)
-                        .cornerRadius(6)
-
-                        Button("🧪 Tes Telegram") {
-                            vm.collapse()
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                                notifService.simulateNotification(type: "telegram")
-                            }
-                        }
-                        .font(.system(size: 9.5, weight: .semibold))
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3.5)
-                        .background(Color.blue.opacity(0.15))
-                        .foregroundColor(.blue)
-                        .cornerRadius(6)
                     }
                 }
                 .padding(8)

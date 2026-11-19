@@ -37,6 +37,23 @@ public final class TimerService: ObservableObject {
         let seconds = totalSecs % 60
         return String(format: "%02d:%02d", minutes, seconds)
     }
+
+    public var targetMinutes: Int {
+        return max(1, Int(round(totalDuration / 60.0)))
+    }
+
+    public func setCustomMinutes(_ minutes: Int) {
+        let clamped = max(1, min(180, minutes))
+        pause()
+        self.totalDuration = TimeInterval(clamped * 60)
+        self.remainingSeconds = TimeInterval(clamped * 60)
+        self.state = .idle
+    }
+
+    public func adjustMinutes(by delta: Int) {
+        let newMin = max(1, min(180, targetMinutes + delta))
+        setCustomMinutes(newMin)
+    }
     
     public func selectPreset(_ preset: TimerPreset) {
         pause()

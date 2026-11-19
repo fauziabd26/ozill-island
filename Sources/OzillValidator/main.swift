@@ -1266,6 +1266,16 @@ struct OzillValidatorApp {
             timer.reset()
             assert(timer.state == .idle)
             assert(timer.remainingSeconds == 300)
+
+            // 6. Custom Minute Adjustment
+            timer.setCustomMinutes(40)
+            assert(timer.targetMinutes == 40)
+            assert(timer.totalDuration == 2400)
+            assert(timer.formattedRemainingTime == "40:00")
+            timer.adjustMinutes(by: 5)
+            assert(timer.targetMinutes == 45)
+            timer.adjustMinutes(by: -1)
+            assert(timer.targetMinutes == 44)
         }
 
         // Assertion 37: Smart Battery Alert & Charger Connected Animation Trigger (Item C)

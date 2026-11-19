@@ -252,10 +252,7 @@ public struct QuickControlsPanel: View {
 
         ScrollView(.vertical, showsIndicators: false) {
             VStack(spacing: 10) {
-                // 1. Pengatur Posisi Layar Island (Drag gesture langsung dari Controls)
-                screenPositionDragBar(palette: palette, accent: accent)
-
-                // 2. Drag & Drop Reordering Header
+                // Drag & Drop Reordering Header
                 HStack {
                     HStack(spacing: 4) {
                         Image(systemName: "arrow.up.and.down")
@@ -280,7 +277,7 @@ public struct QuickControlsPanel: View {
                 .padding(.horizontal, 4)
                 .padding(.top, 2)
 
-                // 3. Dynamic Reorderable Cards
+                // Dynamic Reorderable Cards
                 ForEach(orderManager.cardOrder) { cardType in
                     cardView(for: cardType, palette: palette, accent: accent)
                         .opacity(draggedCard == cardType ? 0.55 : 1.0)
@@ -297,79 +294,6 @@ public struct QuickControlsPanel: View {
             }
             .padding(.vertical, 2)
         }
-    }
-
-    // MARK: - Screen Position Drag Bar
-
-    @ViewBuilder
-    private func screenPositionDragBar(palette: IslandColorPalette, accent: Color) -> some View {
-        let offset = IslandWindowController.shared.customOffset
-        let isDefault = offset == .zero
-
-        HStack(spacing: 8) {
-            Image(systemName: "arrow.up.and.down.and.arrow.left.and.right")
-                .font(.system(size: 11, weight: .bold))
-                .foregroundColor(accent)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Posisi Layar Floating Island")
-                    .font(.system(size: 10.5, weight: .bold))
-                    .foregroundColor(palette.primaryText)
-                Text(isDefault ? "Posisi: Default Tengah Atas" : "Posisi: X \(Int(offset.width)), Y \(Int(offset.height))")
-                    .font(.system(size: 9))
-                    .foregroundColor(palette.secondaryText)
-            }
-
-            Spacer()
-
-            // Drag Button: Pengguna bisa klik & tahan untuk menggeser Island ke mana saja
-            HStack(spacing: 4) {
-                Image(systemName: "hand.draw.fill")
-                    .font(.system(size: 9.5))
-                Text("Drag Posisi")
-                    .font(.system(size: 10, weight: .semibold))
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4.5)
-            .background(accent.opacity(0.18))
-            .foregroundColor(accent)
-            .cornerRadius(6)
-            .contentShape(Rectangle())
-            .help("Klik & seret untuk memindahkan posisi Island di layar")
-            .gesture(
-                DragGesture(minimumDistance: 1, coordinateSpace: .global)
-                    .onChanged { value in
-                        IslandWindowController.shared.startDrag()
-                        IslandWindowController.shared.updateDrag(translation: value.translation)
-                    }
-                    .onEnded { value in
-                        IslandWindowController.shared.endDrag(translation: value.translation)
-                    }
-            )
-
-            if !isDefault {
-                Button(action: {
-                    IslandWindowController.shared.resetPositionToDefault()
-                }) {
-                    Image(systemName: "arrow.counterclockwise")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(palette.secondaryText)
-                        .frame(width: 24, height: 24)
-                        .background(Circle().fill(palette.cardBackground))
-                }
-                .buttonStyle(PlainButtonStyle())
-                .help("Reset Posisi ke Tengah Atas")
-            }
-        }
-        .padding(8)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(palette.cardBackground.opacity(0.5))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(palette.border.opacity(0.4), lineWidth: 0.8)
-        )
     }
 
     // MARK: - Dynamic Card View Renderer
@@ -555,13 +479,6 @@ public struct QuickControlsPanel: View {
     @ViewBuilder
     private func timerCard(palette: IslandColorPalette, accent: Color) -> some View {
         TimerControlView(presentationStyle: .card)
-            .overlay(alignment: .topTrailing) {
-                Image(systemName: "line.3.horizontal")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(palette.secondaryText.opacity(0.5))
-                    .padding(10)
-                    .help("Tahan & seret untuk mengatur posisi kartu ini")
-            }
     }
 
     // MARK: - Card 3: Display Brightness

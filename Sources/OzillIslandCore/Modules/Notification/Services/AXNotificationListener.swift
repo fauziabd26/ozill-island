@@ -149,8 +149,11 @@ public final class AXNotificationListener: ObservableObject {
         }
         recentBannerHashes[combined] = Date()
 
-        // Ekstraksi terstruktur untuk notifikasi sistem & iPhone Mirroring:
-        let parsed = parseNotificationTexts(texts)
+        // Ekstraksi terstruktur untuk notifikasi aplikasi penting pengguna:
+        guard let parsed = parseNotificationTexts(texts) else {
+            // Tolak notifikasi acak sistem yang bukan dari aplikasi pengguna
+            return
+        }
 
         // FILTER NOISE: Tolak tegas jika teks adalah jam (clock), tanggal (date), kalender, atau widget
         if isSystemNoise(texts: texts, appName: parsed.appName, title: parsed.title) {
@@ -226,22 +229,24 @@ public final class AXNotificationListener: ObservableObject {
             }
         }
 
-        // 4. Jika appName adalah "Notifikasi Sistem" tanpa judul alert yang relevan
-        if appLower == "notifikasi sistem" {
-            if titleLower.isEmpty || titleLower == "notifikasi sistem" || titleLower.count < 3 {
-                return true
-            }
+        // 4. Tolak semua notifikasi generik "Notifikasi Sistem" yang bukan aplikasi penting
+        if appLower == "notifikasi sistem" || appLower.isEmpty {
+            return true
         }
 
         return false
     }
 
-    private func parseNotificationTexts(_ texts: [String]) -> (appName: String, title: String, message: String) {
-        // Daftar nama aplikasi umum
-        let knownApps = ["whatsapp", "instagram", "telegram", "slack", "mail", "discord", "messages", "pesan"]
+    private func parseNotificationTexts(_ texts: [String]) -> (appName: String, title: String, message: String)? {
+        // Daftar nama aplikasi komunikasi & produktivitas penting pengguna
+        let knownApps = [
+            "whatsapp", "instagram", "telegram", "slack", "mail", "discord",
+            "messages", "pesan", "teams", "zoom", "gmail", "outlook", "line",
+            "wechat", "twitter", "reminders", "pengingat"
+        ]
 
         var foundAppIndex: Int? = nil
-        var detectedAppName = "Notifikasi Sistem"
+        var detectedAppName: String? = nil
 
         for (i, t) in texts.enumerated() {
             let lower = t.lowercased()
@@ -255,16 +260,19 @@ public final class AXNotificationListener: ObservableObject {
             if foundAppIndex != nil { break }
         }
 
-        var remaining = texts
-        if let idx = foundAppIndex {
-            remaining.remove(at: idx)
+        // Jika bukan dari aplikasi penting di atas, tolak (jangan tampilkan notifikasi sistem acak)
+        guard let appName = detectedAppName, let idx = foundAppIndex else {
+            return nil
         }
+
+        var remaining = texts
+        remaining.remove(at: idx)
 
         let title: String
         let message: String
 
         if remaining.isEmpty {
-            title = detectedAppName
+            title = appName
             message = "Pesan baru masuk"
         } else if remaining.count == 1 {
             title = remaining[0]
@@ -274,7 +282,7 @@ public final class AXNotificationListener: ObservableObject {
             message = remaining.dropFirst().joined(separator: " • ")
         }
 
-        return (appName: detectedAppName, title: title, message: message)
+        return (appName: appName, title: title, message: message)
     }
 
     private func capitalizeAppName(_ raw: String) -> String {
