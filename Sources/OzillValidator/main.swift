@@ -1941,6 +1941,16 @@ struct OzillValidatorApp {
             let timerStrip = TimerControlView(presentationStyle: .strip)
             assert(timerStrip.presentationStyle == .strip)
 
+            // 4c. QuickControlsOrderManager Drag & Drop Reordering
+            let orderMgr = QuickControlsOrderManager.shared
+            assert(orderMgr.cardOrder.count == 4, "Harus ada 4 jenis kartu kontrol yang dapat diatur posisinya")
+            let firstCard = orderMgr.cardOrder[0]
+            let secondCard = orderMgr.cardOrder[1]
+            orderMgr.moveItem(from: firstCard, to: secondCard)
+            assert(orderMgr.cardOrder[1] == firstCard, "Item harus berpindah posisi saat di-drag & drop")
+            orderMgr.resetToDefault()
+            assert(orderMgr.cardOrder == QuickControlCardType.allCases, "Reset harus mengembalikan urutan posisi default")
+
             // 5. Audio State Propagation through Quick Controls
             let initialVol = AudioController.shared.volume
             AudioController.shared.setVolume(0.42)
