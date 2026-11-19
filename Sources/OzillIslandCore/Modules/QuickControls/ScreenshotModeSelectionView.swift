@@ -109,14 +109,14 @@ public struct ScreenshotModeSelectionView: View {
             .help("Tangkap jendela aplikasi aktif")
             .accessibilityLabel("Tangkap jendela aplikasi")
             
-            // Dismiss / Back Button
+            // Dismiss / Back Button (32x32 pt hit target)
             Button(action: {
                 onDismiss()
             }) {
                 Image(systemName: "xmark")
                     .font(.system(size: 10, weight: .bold))
                     .foregroundColor(palette.secondaryText)
-                    .frame(width: 24, height: 24)
+                    .frame(width: 32, height: 32)
                     .background(Circle().fill(palette.cardBackground.opacity(0.6)))
             }
             .buttonStyle(PlainButtonStyle())

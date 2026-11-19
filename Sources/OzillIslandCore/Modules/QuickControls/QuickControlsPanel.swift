@@ -123,11 +123,15 @@ public struct QuickControlsPanel: View {
                 .help(brightnessController.isAvailable ? "Buka Slider Kecerahan Layar" : "Kecerahan tidak didukung untuk layar ini")
                 .accessibilityLabel(brightnessController.isAvailable ? "Kecerahan \(Int(brightnessController.brightness * 100)) persen. Klik untuk membuka slider." : "Kecerahan tidak didukung")
                 
-                // 4. Safari Quick Launcher
-                ApplicationQuickActionView()
+                // 4. Safari Quick Launcher (Compact 32x32 pt in strip)
+                ApplicationQuickActionView(showsTitle: false)
                 
-                // 5. Screenshot Utility
-                ScreenshotControlView()
+                // 5. Screenshot Utility (Compact 32x32 pt in strip, opens screenshot drawer)
+                ScreenshotControlView(showsTitle: false, onTriggerModes: {
+                    withAnimation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.78)) {
+                        activeDrawer = .screenshot
+                    }
+                })
                 
             case .audio:
                 // Expanded Audio Slider Bar
@@ -268,10 +272,10 @@ public struct QuickControlsPanel: View {
                     .fill(palette.cardBackground.opacity(0.6))
             )
             
-            // Section 4: Quick Launchers (Safari & Screenshot)
+            // Section 4: Quick Launchers (Safari & Screenshot with full titles)
             HStack(spacing: 10) {
-                ApplicationQuickActionView()
-                ScreenshotControlView()
+                ApplicationQuickActionView(showsTitle: true)
+                ScreenshotControlView(showsTitle: true)
                 Spacer()
             }
             .padding(.horizontal, 4)

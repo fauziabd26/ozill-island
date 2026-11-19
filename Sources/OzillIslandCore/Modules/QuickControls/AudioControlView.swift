@@ -25,32 +25,32 @@ public struct AudioControlView: View {
         let palette = theme.palette
         let accent = theme.effectiveAccentColor
         
-        HStack(spacing: 8) {
-            // Mute / Unmute Button
+        HStack(spacing: 6) {
+            // Mute / Unmute Button (Hit target 32x32 pt)
             Button(action: {
                 controller.toggleMute()
             }) {
                 Image(systemName: speakerIcon)
                     .font(.system(size: 11, weight: .bold))
                     .foregroundColor(controller.isMuted ? .red : palette.primaryText)
-                    .frame(width: 24, height: 24)
+                    .frame(width: 32, height: 32)
                     .background(
                         Circle()
-                            .fill(controller.isMuted ? Color.red.opacity(0.18) : palette.cardBackground)
+                            .fill(controller.isMuted ? Color.red.opacity(0.18) : palette.cardBackground.opacity(0.8))
                     )
             }
             .buttonStyle(PlainButtonStyle())
             .help(controller.isMuted ? "Bunyikan Audio" : "Bisu (Mute)")
             .accessibilityLabel(controller.isMuted ? "Audio dibisukan. Klik untuk membunyikan." : "Audio aktif. Klik untuk membisukan.")
             
-            // Decrease Volume Button (-)
+            // Decrease Volume Button (-) (Hit target 32x32 pt)
             Button(action: {
                 controller.decreaseVolume()
             }) {
                 Image(systemName: "minus")
-                    .font(.system(size: 9.5, weight: .bold))
+                    .font(.system(size: 10, weight: .bold))
                     .foregroundColor(palette.secondaryText)
-                    .frame(width: 20, height: 20)
+                    .frame(width: 32, height: 32)
                     .background(Circle().fill(palette.cardBackground.opacity(0.7)))
             }
             .buttonStyle(PlainButtonStyle())
@@ -77,7 +77,7 @@ public struct AudioControlView: View {
                         .shadow(color: Color.black.opacity(0.3), radius: 2, x: 0, y: 1)
                         .offset(x: max(0, min(geo.size.width - 12, (geo.size.width * CGFloat(controller.volume)) - 6)))
                 }
-                .frame(height: 20)
+                .frame(height: 32)
                 .contentShape(Rectangle())
                 .gesture(
                     DragGesture(minimumDistance: 0)
@@ -93,19 +93,19 @@ public struct AudioControlView: View {
                         }
                 )
             }
-            .frame(height: 20)
+            .frame(height: 32)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Tingkat Volume")
             .accessibilityValue("\(Int(controller.volume * 100)) persen")
             
-            // Increase Volume Button (+)
+            // Increase Volume Button (+) (Hit target 32x32 pt)
             Button(action: {
                 controller.increaseVolume()
             }) {
                 Image(systemName: "plus")
-                    .font(.system(size: 9.5, weight: .bold))
+                    .font(.system(size: 10, weight: .bold))
                     .foregroundColor(palette.secondaryText)
-                    .frame(width: 20, height: 20)
+                    .frame(width: 32, height: 32)
                     .background(Circle().fill(palette.cardBackground.opacity(0.7)))
             }
             .buttonStyle(PlainButtonStyle())

@@ -4,10 +4,13 @@ import SwiftUI
 public struct ApplicationQuickActionView: View {
     @ObservedObject private var launcher = ApplicationLauncher.shared
     @ObservedObject private var theme = IslandThemeManager.shared
+    public var showsTitle: Bool
     @State private var isLaunching: Bool = false
     @State private var errorMessage: String? = nil
     
-    public init() {}
+    public init(showsTitle: Bool = true) {
+        self.showsTitle = showsTitle
+    }
     
     public var body: some View {
         let palette = theme.palette
@@ -24,17 +27,19 @@ public struct ApplicationQuickActionView: View {
                 }
             }
         }) {
-            HStack(spacing: 5) {
+            HStack(spacing: showsTitle ? 5 : 0) {
                 Image(systemName: "safari.fill")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(accent)
                 
-                Text("Safari")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(palette.primaryText)
+                if showsTitle {
+                    Text("Safari")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(palette.primaryText)
+                }
             }
-            .padding(.horizontal, 10)
-            .frame(height: 32)
+            .padding(.horizontal, showsTitle ? 10 : 0)
+            .frame(width: showsTitle ? nil : 32, height: 32)
             .background(
                 Capsule(style: .continuous)
                     .fill(palette.cardBackground.opacity(isLaunching ? 0.9 : 0.7))

@@ -5,9 +5,14 @@ public struct ScreenshotControlView: View {
     @ObservedObject private var controller = ScreenshotController.shared
     @ObservedObject private var theme = IslandThemeManager.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    public var showsTitle: Bool
+    public var onTriggerModes: (() -> Void)?
     @State private var isShowingModes: Bool = false
     
-    public init() {}
+    public init(showsTitle: Bool = true, onTriggerModes: (() -> Void)? = nil) {
+        self.showsTitle = showsTitle
+        self.onTriggerModes = onTriggerModes
+    }
     
     public var body: some View {
         let palette = theme.palette
@@ -24,23 +29,27 @@ public struct ScreenshotControlView: View {
                 Button(action: {
                     if !controller.checkPermission() {
                         controller.openPermissionSettings()
+                    } else if let onTriggerModes = onTriggerModes {
+                        onTriggerModes()
                     } else {
                         withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.15)) {
                             isShowingModes = true
                         }
                     }
                 }) {
-                    HStack(spacing: 5) {
+                    HStack(spacing: showsTitle ? 5 : 0) {
                         Image(systemName: "camera.viewfinder")
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundColor(accent)
                         
-                        Text("Screenshot")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundColor(palette.primaryText)
+                        if showsTitle {
+                            Text("Screenshot")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(palette.primaryText)
+                        }
                     }
-                    .padding(.horizontal, 10)
-                    .frame(height: 32)
+                    .padding(.horizontal, showsTitle ? 10 : 0)
+                    .frame(width: showsTitle ? nil : 32, height: 32)
                     .background(
                         Capsule(style: .continuous)
                             .fill(palette.cardBackground.opacity(0.7))
