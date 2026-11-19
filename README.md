@@ -122,6 +122,37 @@ Agar Anda tidak perlu membuka aplikasi secara manual setiap kali menyalakan Mac:
 
 ---
 
+## ❓ Solusi Masalah (Troubleshooting & FAQ)
+
+### Apa yang harus dilakukan jika pulau macet, tidak merespons klik, atau posisinya terlempar?
+
+Meskipun aplikasi sudah dioptimalkan dengan deteksi cerdas, jika sewaktu-waktu aplikasi terasa macet atau posisinya tidak sengaja tergeser terlalu jauh, ikuti solusi cepat berikut:
+
+#### 1. Cara Cepat & Mudah (Tanpa Buka Terminal):
+- **Gunakan Ikon Menu Bar (🌙)**: Di pojok kanan atas layar Mac Anda selalu ada ikon bulan bintang. Ikon menu bar ini berjalan di sistem terpisah dan **tidak akan pernah ikut macet**. Cukup klik ikon **🌙** lalu pilih **Keluar (Quit)**, kemudian buka kembali `OzillIsland` dari folder Aplikasi.
+- **Kembalikan Posisi yang Terlempar (Tombol 🎯)**: Jika pulau tidak sengaja tergeser ke sudut layar yang sulit dijangkau, klik ikon menu bar **🌙** > **Pengaturan**, lalu klik tombol target **`🎯`** untuk langsung mengembalikan pulau ke posisi tengah atas default.
+
+#### 2. Jika Aplikasi Benar-Benar Beku (Force Quit):
+1. Tekan tombol **`Command + Spasi`** di keyboard untuk membuka Spotlight.
+2. Ketik **`Activity Monitor`** lalu tekan **Enter**.
+3. Ketik **`Ozill`** di kolom pencarian kanan atas.
+4. Klik pada nama **OzillIsland**, lalu klik tombol tanda silang **`(X)`** di toolbar atas dan pilih **Force Quit**.
+5. Buka kembali aplikasinya dari folder Applications.
+
+#### 3. Solusi 1 Detik Lewat Terminal (Untuk Pengguna Mahir):
+Cukup jalankan satu baris perintah ini di Terminal untuk me-restart aplikasi secara instan dan bersih:
+```bash
+pkill -f OzillIsland && open build/OzillIsland.app
+```
+Atau jika ingin mereset koordinat posisi pulau kembali ke tengah bawaan pabrik:
+```bash
+defaults delete com.fauzi.OzillIsland OzillIsland_UserOffsetX 2>/dev/null
+defaults delete com.fauzi.OzillIsland OzillIsland_UserOffsetY 2>/dev/null
+pkill -f OzillIsland && open build/OzillIsland.app
+```
+
+---
+
 ## 🗑️ Panduan Menghapus Aplikasi (Uninstall)
 
 Jika Anda ingin menghapus aplikasi ini dari Mac Anda, ikuti 3 langkah bersih berikut:
