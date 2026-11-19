@@ -1331,6 +1331,15 @@ struct OzillValidatorApp {
             notifService.dismissActiveNotification()
             assert(notifService.activeNotification == nil, "Dismiss harus mengembalikan activeNotification ke nil")
             assert(notifMod.currentPriority == .background)
+
+            // 5. Verifikasi penolakan derau sistem (Clock, Date, Calendar & Widget noise)
+            let listener = AXNotificationListener.shared
+            assert(listener.isSystemNoise(texts: ["Clock", "15:10", "Thu 19 Nov"], appName: "Notifikasi Sistem", title: "Clock") == true, "Clock widget harus ditolak sebagai derau")
+            assert(listener.isSystemNoise(texts: ["Date", "Thursday, 19 November"], appName: "Notifikasi Sistem", title: "Date") == true, "Date widget harus ditolak sebagai derau")
+            assert(listener.isSystemNoise(texts: ["15:10"], appName: "Notifikasi Sistem", title: "15:10") == true, "Waktu murni harus ditolak sebagai derau")
+            assert(listener.isSystemNoise(texts: ["Weather", "28° Rain"], appName: "Notifikasi Sistem", title: "Weather") == true, "Weather widget harus ditolak sebagai derau")
+            assert(listener.isSystemNoise(texts: ["Kamis", "19", "November", "15:10"], appName: "Notifikasi Sistem", title: "Kamis") == true, "Komposisi kalender harus ditolak")
+            assert(listener.isSystemNoise(texts: ["WhatsApp", "Budi", "Halo cuy"], appName: "WhatsApp", title: "Budi") == false, "Notifikasi WhatsApp asli harus diterima")
         }
 
         // Assertion 40: Fase 3A - AudioController Bounds, Increment, Mute Toggle & Debounce
