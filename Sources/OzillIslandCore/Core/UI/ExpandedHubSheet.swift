@@ -2,19 +2,15 @@ import SwiftUI
 
 public enum HubTab: String, CaseIterable, Identifiable {
     case prayer = "Shalat"
-    case music = "Musik"
     case controls = "Controls"
-    case timer = "Timer"
     case system = "Info"
-    
+
     public var id: String { rawValue }
-    
+
     public var sfSymbol: String {
         switch self {
         case .prayer: return "moon.stars.fill"
-        case .music: return "music.note"
         case .controls: return "slider.horizontal.3"
-        case .timer: return "timer"
         case .system: return "calendar.badge.clock"
         }
     }
@@ -27,17 +23,17 @@ public struct ExpandedHubSheet: View {
     @ObservedObject private var theme = IslandThemeManager.shared
     @ObservedObject private var router = IslandModeRouter.shared
     @ObservedObject private var musicManager = UniversalMusicManager.shared
-    
+
     @State private var selectedTab: HubTab = .prayer
-    
+
     public init(vm: PrayerIslandViewModel) {
         self.vm = vm
     }
-    
+
     public var body: some View {
         let palette = theme.palette
         let accent = theme.effectiveAccentColor
-        
+
         VStack(spacing: 10) {
             // Top Drag Handle (Bisa di-drag untuk menggeser Island ke mana saja)
             Capsule(style: .continuous)
@@ -55,7 +51,7 @@ public struct ExpandedHubSheet: View {
                             IslandWindowController.shared.endDrag(translation: value.translation)
                         }
                 )
-            
+
             // Header Bar
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -67,12 +63,12 @@ public struct ExpandedHubSheet: View {
                             .font(.system(size: 13, weight: .bold))
                             .foregroundColor(palette.primaryText)
                     }
-                    
+
                     HStack(spacing: 4) {
                         Text(vm.locationManager.locationName)
                             .font(.system(size: 10, weight: .medium))
                             .foregroundColor(palette.secondaryText)
-                        
+
                         Button(action: {
                             vm.locationManager.requestSingleLocation()
                         }) {
@@ -85,9 +81,9 @@ public struct ExpandedHubSheet: View {
                         .help("Refresh Lokasi GPS")
                     }
                 }
-                
+
                 Spacer()
-                
+
                 HStack(spacing: 8) {
                     // Pin Music Button
                     Button(action: {
@@ -114,7 +110,7 @@ public struct ExpandedHubSheet: View {
                     }
                     .buttonStyle(PlainButtonStyle())
                     .help(musicManager.isPinnedToMusic ? "Lepas Pin Musik (Kembali ke Otomatis)" : "Pin Musik ke Island (Kunci agar tidak hilang)")
-                    
+
                     if IslandWindowController.shared.customOffset != .zero {
                         Button(action: {
                             IslandWindowController.shared.resetPositionToDefault()
@@ -128,7 +124,7 @@ public struct ExpandedHubSheet: View {
                         .buttonStyle(PlainButtonStyle())
                         .help("Reset Posisi ke Tengah Atas")
                     }
-                    
+
                     Button(action: {
                         vm.openSettings()
                     }) {
@@ -142,7 +138,7 @@ public struct ExpandedHubSheet: View {
                     }
                     .buttonStyle(PlainButtonStyle())
                     .help("Pengaturan & Preferensi")
-                    
+
                     Button(action: {
                         vm.collapse()
                     }) {
@@ -158,7 +154,7 @@ public struct ExpandedHubSheet: View {
                     .help("Tutup (Collapse) Island")
                 }
             }
-            
+
             // Segmented Module Tab Bar
             HStack(spacing: 4) {
                 ForEach(HubTab.allCases) { tab in
@@ -186,24 +182,20 @@ public struct ExpandedHubSheet: View {
                     .buttonStyle(PlainButtonStyle())
                 }
             }
-            
+
             // Tab Content
             Group {
                 switch selectedTab {
                 case .prayer:
                     PrayerTabContent(vm: vm)
-                case .music:
-                    ExpandedMusicSheet()
                 case .controls:
                     QuickControlsPanel(presentationStyle: .sheet)
-                case .timer:
-                    TimerTabContent()
                 case .system:
                     SystemInfoSheet()
                 }
             }
             .transition(.opacity.combined(with: .scale(scale: 0.98)))
-            
+
             Spacer(minLength: 0)
         }
         .padding(14)
@@ -220,13 +212,13 @@ public struct ExpandedHubSheet: View {
         .shadow(color: palette.shadowColor, radius: 20, x: 0, y: 10)
         .onAppear {
             if router.currentMode == .music || musicManager.playbackState.isPlaying {
-                self.selectedTab = .music
+                self.selectedTab = .controls
             }
         }
         .onChange(of: router.currentMode) { newMode in
             if newMode == .music {
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.78)) {
-                    self.selectedTab = .music
+                    self.selectedTab = .controls
                 }
             }
         }
@@ -237,11 +229,11 @@ public struct ExpandedHubSheet: View {
 struct PrayerTabContent: View {
     @ObservedObject var vm: PrayerIslandViewModel
     @ObservedObject private var theme = IslandThemeManager.shared
-    
+
     var body: some View {
         let palette = theme.palette
         let accent = theme.effectiveAccentColor
-        
+
         VStack(spacing: 8) {
             // Audio alert bar if playing
             if vm.audioManager.isPlaying {
@@ -272,7 +264,7 @@ struct PrayerTabContent: View {
                         .fill(Color.green.opacity(0.15))
                 )
             }
-            
+
             // Hero: Next Prayer Card
             HStack(spacing: 14) {
                 HStack(spacing: 10) {
@@ -284,12 +276,12 @@ struct PrayerTabContent: View {
                             .font(.system(size: 17, weight: .bold))
                             .foregroundColor(.white)
                     }
-                    
+
                     VStack(alignment: .leading, spacing: 1) {
                         Text("Menjelang \(vm.scheduler.nextPrayerName.rawValue)")
                             .font(.system(size: 11, weight: .medium))
                             .foregroundColor(palette.secondaryText)
-                        
+
                         if let schedule = vm.scheduler.schedule {
                             Text(schedule.formattedTime(for: vm.scheduler.nextPrayerName, timeZone: vm.locationManager.currentTimeZone))
                                 .font(.system(size: 20, weight: .bold, design: .monospaced))
@@ -297,9 +289,9 @@ struct PrayerTabContent: View {
                         }
                     }
                 }
-                
+
                 Spacer()
-                
+
                 VStack(alignment: .trailing, spacing: 2) {
                     Text(vm.scheduler.timeRemainingString)
                         .font(.system(size: 15, weight: .bold, design: .monospaced))
@@ -310,7 +302,7 @@ struct PrayerTabContent: View {
                             Capsule(style: .continuous)
                                 .fill(palette.cardBackground)
                         )
-                    
+
                     Text("Hitung Mundur")
                         .font(.system(size: 9))
                         .foregroundColor(palette.secondaryText)
@@ -321,7 +313,7 @@ struct PrayerTabContent: View {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(palette.cardBackground.opacity(0.7))
             )
-            
+
             // Timetable 5 Waktu
             if let schedule = vm.scheduler.schedule {
                 let now = Date()
@@ -330,21 +322,21 @@ struct PrayerTabContent: View {
                     ForEach(schedule.items, id: \.prayer.rawValue) { item in
                         let isNext = item.prayer == next
                         let isPassed = item.time < now && !isNext
-                        
+
                         HStack {
                             HStack(spacing: 7) {
                                 Image(systemName: item.prayer.sfSymbol)
                                     .font(.system(size: 11))
                                     .foregroundColor(isNext ? accent : palette.secondaryText)
                                     .frame(width: 14)
-                                
+
                                 Text(item.prayer.rawValue)
                                     .font(.system(size: 12, weight: isNext ? .bold : .medium))
                                     .foregroundColor(isNext ? palette.primaryText : (isPassed ? palette.secondaryText.opacity(0.6) : palette.primaryText))
                             }
-                            
+
                             Spacer()
-                            
+
                             if isNext {
                                 Text("SELANJUTNYA")
                                     .font(.system(size: 8, weight: .heavy))
@@ -353,7 +345,7 @@ struct PrayerTabContent: View {
                                     .background(Capsule(style: .continuous).fill(accent.opacity(0.18)))
                                     .foregroundColor(accent)
                             }
-                            
+
                             Text(schedule.formattedTime(for: item.prayer, timeZone: vm.locationManager.currentTimeZone))
                                 .font(.system(size: 12, weight: isNext ? .bold : .medium, design: .monospaced))
                                 .foregroundColor(isNext ? accent : (isPassed ? palette.secondaryText.opacity(0.6) : palette.primaryText))

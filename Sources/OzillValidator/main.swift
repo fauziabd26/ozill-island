@@ -1914,10 +1914,11 @@ struct OzillValidatorApp {
             assert(ApplicationLauncher.shared === ApplicationLauncher.shared, "ApplicationLauncher harus singleton SSOT")
             assert(ScreenshotController.shared === ScreenshotController.shared, "ScreenshotController harus singleton SSOT")
 
-            // 2. HubTab Enum Expansion in ExpandedHubSheet
+            // 2. HubTab Enum Expansion in ExpandedHubSheet (Penyatuan Shalat, Controls & Info)
             assert(HubTab.allCases.contains(.controls), "HubTab harus memuat tab .controls")
             assert(HubTab.controls.sfSymbol == "slider.horizontal.3", "Simbol SF Tab Controls harus 'slider.horizontal.3'")
             assert(HubTab.controls.rawValue == "Controls")
+            assert(HubTab.allCases.count == 3, "HubTab sekarang memiliki 3 tab terpadu: Shalat, Controls, dan Info")
 
             // 3. QuickControlsPanel Model Composition & Presentation Styles
             let stripPanel = QuickControlsPanel(presentationStyle: .strip, initialDrawer: .none)
@@ -1928,10 +1929,17 @@ struct OzillValidatorApp {
             assert(sheetPanel.presentationStyle == .sheet)
 
             // 4. Drawer State Enum Verification
-            let allDrawers: [QuickControlsActiveDrawer] = [.none, .audio, .brightness, .screenshot]
-            assert(allDrawers.count == 4)
+            let allDrawers: [QuickControlsActiveDrawer] = [.none, .audio, .brightness, .screenshot, .timer]
+            assert(allDrawers.count == 5)
             assert(QuickControlsActiveDrawer.none != QuickControlsActiveDrawer.audio)
             assert(QuickControlsActiveDrawer.brightness != QuickControlsActiveDrawer.screenshot)
+            assert(QuickControlsActiveDrawer.timer != QuickControlsActiveDrawer.none)
+
+            // 4b. TimerControlView Composition
+            let timerCard = TimerControlView(presentationStyle: .card)
+            assert(timerCard.presentationStyle == .card)
+            let timerStrip = TimerControlView(presentationStyle: .strip)
+            assert(timerStrip.presentationStyle == .strip)
 
             // 5. Audio State Propagation through Quick Controls
             let initialVol = AudioController.shared.volume
