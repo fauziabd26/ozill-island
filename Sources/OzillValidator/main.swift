@@ -1471,10 +1471,183 @@ struct OzillValidatorApp {
             await manager.pollActiveMedia()
         }
 
+        // MARK: - Assertion 42: Fase 3C - Display Brightness Control, Clamping, Multi-Display Selection & External Fallback
+        final class MockDisplayHardwareBridge: DisplayHardwareBridging, @unchecked Sendable {
+            private let lock = NSLock()
+            private var displays: [DisplayDevice]
+            private var brightnessMap: [CGDirectDisplayID: Float]
+            var shouldFailWrite: Bool = false
+            var shouldFailRead: Bool = false
+            var lastWrittenValue: Float?
+            var lastWrittenDisplayId: CGDirectDisplayID?
+            
+            init(displays: [DisplayDevice], initialBrightness: [CGDirectDisplayID: Float] = [:]) {
+                self.displays = displays
+                self.brightnessMap = initialBrightness
+            }
+            
+            func setDisplays(_ newDisplays: [DisplayDevice]) {
+                lock.withLock {
+                    self.displays = newDisplays
+                }
+            }
+            
+            func discoverDisplays() async -> [DisplayDevice] {
+                lock.withLock { displays }
+            }
+            
+            func readBrightness(for displayId: CGDirectDisplayID) async -> Result<Float, Error> {
+                lock.withLock {
+                    if shouldFailRead {
+                        return .failure(DisplayError.hardwareReadFailed(-99))
+                    }
+                    guard let dev = displays.first(where: { $0.id == displayId }) else {
+                        return .failure(DisplayError.displayNotFound)
+                    }
+                    guard dev.canAdjustBrightness else {
+                        return .failure(DisplayError.unsupportedExternalMonitor)
+                    }
+                    let val = brightnessMap[displayId] ?? 0.5
+                    return .success(val)
+                }
+            }
+            
+            func writeBrightness(_ value: Float, for displayId: CGDirectDisplayID) async -> Result<Void, Error> {
+                lock.withLock {
+                    if shouldFailWrite {
+                        return .failure(DisplayError.hardwareWriteFailed(-99))
+                    }
+                    guard let dev = displays.first(where: { $0.id == displayId }) else {
+                        return .failure(DisplayError.displayNotFound)
+                    }
+                    guard dev.canAdjustBrightness else {
+                        return .failure(DisplayError.unsupportedExternalMonitor)
+                    }
+                    let clamped = max(0.0, min(1.0, value))
+                    brightnessMap[displayId] = clamped
+                    lastWrittenValue = clamped
+                    lastWrittenDisplayId = displayId
+                    return .success(())
+                }
+            }
+        }
+
+        await runAsyncTest("Fase 3C: Display Brightness Control, Clamping, Multi-Display Selection & External Fallback") {
+            let builtInDisplay = DisplayDevice(
+                id: 1,
+                name: "Built-in Retina Display",
+                kind: .builtIn,
+                isMain: true,
+                canAdjustBrightness: true
+            )
+            let externalMonitor = DisplayDevice(
+                id: 2,
+                name: "Dell UltraSharp 4K",
+                kind: .external,
+                isMain: false,
+                canAdjustBrightness: false
+            )
+            
+            let mockBridge = MockDisplayHardwareBridge(
+                displays: [builtInDisplay, externalMonitor],
+                initialBrightness: [1: 0.5]
+            )
+            let controller = BrightnessController(hardwareBridge: mockBridge)
+            controller.stopSyncTimer()
+            await controller.refreshDisplays()
+            await controller.refreshBrightness()
+            
+            // 1. Verifikasi inisialisasi & seleksi awal ke built-in display
+            assert(controller.activeDisplay?.id == 1, "Default active display harus memilih built-in display")
+            assert(controller.isAvailable == true, "Built-in display harus mendukung kontrol kecerahan")
+            assert(controller.brightness == 0.5, "Nilai brightness awal harus 0.5")
+            
+            // 2. Brightness Clamping
+            controller.setBrightness(1.4)
+            assert(controller.brightness == 1.0, "Nilai > 1.0 harus di-clamp ke 1.0")
+            controller.setBrightness(-0.2)
+            assert(controller.brightness == 0.0, "Nilai < 0.0 harus di-clamp ke 0.0")
+            controller.setBrightness(0.65)
+            assert(abs(controller.brightness - 0.65) < 0.001, "Nilai valid 0.65 harus tersimpan")
+            
+            // 3. Step Increment & Decrement
+            controller.increaseBrightness() // 0.65 + 0.05 = 0.70
+            assert(abs(controller.brightness - 0.70) < 0.001, "increaseBrightness() harus menaikkan 0.05")
+            controller.decreaseBrightness() // 0.70 - 0.05 = 0.65
+            assert(abs(controller.brightness - 0.65) < 0.001, "decreaseBrightness() harus menurunkan 0.05")
+            
+            controller.setBrightness(0.98)
+            controller.increaseBrightness()
+            assert(controller.brightness == 1.0, "increaseBrightness di dekat 1.0 harus di-clamp ke 1.0")
+            
+            controller.setBrightness(0.02)
+            controller.decreaseBrightness()
+            assert(controller.brightness == 0.0, "decreaseBrightness di dekat 0.0 harus di-clamp ke 0.0")
+            
+            // 4. Hardware Write Reflection setelah debounce
+            try? await Task.sleep(nanoseconds: 70_000_000)
+            assert(mockBridge.lastWrittenValue == 0.0, "Hardware bridge harus menerima nilai akhir setelah debounce")
+            assert(mockBridge.lastWrittenDisplayId == 1)
+            
+            // 5. Multiple Display Selection (Beralih ke Monitor Eksternal)
+            controller.selectDisplay(id: 2)
+            await controller.refreshBrightness()
+            assert(controller.activeDisplay?.id == 2, "Active display harus berganti ke Dell UltraSharp (id: 2)")
+            assert(controller.isAvailable == false, "Monitor eksternal tanpa DDC/CI publik harus unavailable")
+            if case .unsupported = controller.status {
+                // Sesuai ekspektasi
+            } else {
+                assertionFailure("Status monitor eksternal harus .unsupported")
+            }
+            
+            // 6. Penolakan Penulisan pada Monitor Eksternal yang Tidak Didukung
+            let lastWrittenBefore = mockBridge.lastWrittenValue
+            controller.setBrightness(0.85)
+            try? await Task.sleep(nanoseconds: 70_000_000)
+            assert(mockBridge.lastWrittenValue == lastWrittenBefore, "Penulisan brightness ke monitor eksternal tidak boleh diproses ke hardware")
+            
+            // 7. Display Disconnect & Auto Fallback
+            mockBridge.setDisplays([builtInDisplay])
+            await controller.refreshDisplays()
+            await controller.refreshBrightness()
+            assert(controller.activeDisplay?.id == 1, "Saat monitor eksternal dicabut, harus otomatis fallback ke built-in")
+            assert(controller.isAvailable == true, "Status harus kembali available setelah kembali ke built-in")
+            
+            // 8. Error Handling
+            mockBridge.shouldFailRead = true
+            await controller.refreshBrightness(force: true)
+            assert(controller.isAvailable == false, "Saat hardware read gagal, isAvailable harus false")
+            if case .error = controller.status {
+                // Sesuai ekspektasi
+            } else {
+                assertionFailure("Status saat hardware error harus .error")
+            }
+            
+            // 9. DisplayState Model Purity
+            let stateModel = DisplayState(brightness: 0.8, status: .available, activeDisplay: builtInDisplay)
+            assert(stateModel.isAvailable == true)
+            let extStateModel = DisplayState(brightness: 0.8, status: .available, activeDisplay: externalMonitor)
+            assert(extStateModel.isAvailable == false, "DisplayState harus bernilai isAvailable = false jika display canAdjustBrightness = false")
+            
+            // 10. Native Hardware Bridge Safe Discovery
+            let nativeBridge = NativeDisplayHardwareBridge()
+            let nativeDisplays = await nativeBridge.discoverDisplays()
+            assert(!nativeDisplays.isEmpty, "Native bridge harus mendeteksi minimal 1 layar pada macOS aktif")
+            if let builtIn = nativeDisplays.first(where: { $0.kind == .builtIn }) {
+                let res = await nativeBridge.readBrightness(for: builtIn.id)
+                switch res {
+                case .success(let val):
+                    assert(val >= 0.0 && val <= 1.0, "Nilai pembacaan brightness built-in fisik harus di antara 0.0 s/d 1.0")
+                case .failure:
+                    break // Toleransi jika mesin virtual / CI tanpa backlight
+                }
+            }
+        }
+
         print("""
 
         ================================================================================
-           HASIL FINAL FASE 2 + FASE 3A & 3B (AUDIO & MEDIA CONTROL) VALIDATION:
+           HASIL FINAL FASE 2 + FASE 3A, 3B, & 3C (AUDIO, MEDIA, BRIGHTNESS) VALIDATION:
            1. Magic numbers (86400, 15, 45) diganti konstanta bernama bertipe TimeInterval.
            2. Deduplikasi Adzan diperkuat menggunakan Set<String> dengan pemangkasan memori.
            3. Sleep/Wake mencatat MissedPrayerOccurrence terstruktur (nama, waktu, zona).
@@ -1502,7 +1675,8 @@ struct OzillValidatorApp {
            25. Universal Notification Island: Integrasi Jalur A (AXObserver), B (Browser Web), C (Sistem) (Assertion 39 PASS).
            26. Fase 3A: AudioController Clamping, +/- 0.05 Step, Mute Toggle & State Isolation (Assertion 40 PASS).
            27. Fase 3B: MediaControl Previous/Next/PlayPause, Capabilities, Chrome Multi-Tab Manual Routing (Assertion 41 PASS).
-           28. Seluruh 41 Automated Validation Assertions BERHASIL (PASS).
+           28. Fase 3C: Display Brightness Control, Clamping, Multi-Display Selection & External Fallback (Assertion 42 PASS).
+           29. Seluruh 42 Automated Validation Assertions BERHASIL (PASS).
         ================================================================================
         """)
     }
